@@ -1,0 +1,19 @@
+# Maven
+target/
+*.jar
+dependency-reduced-pom.xml
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Environment / secrets
+.env
+
+# Runtime database (trade journal)
+data/
+
+# OS
+.DS_Store
+Thumbs.db
