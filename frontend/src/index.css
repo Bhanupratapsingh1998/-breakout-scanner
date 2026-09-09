@@ -24,6 +24,14 @@
   --cat-custom: #4a3aa7;
 
   --accent: #2a78d6;
+  /* Brand mark only. Deliberately not --status-critical: the logo should not shift
+     if the status palette is ever retuned. */
+  --logo-candle: #d03b3b;
+  --logo-bg: rgba(12, 163, 12, 0.12);
+  /* Scan button: green wash, but the label rides --text-primary so it stays black on the
+     light wash and white on the dark one. */
+  --btn-scan-bg: rgba(12, 163, 12, 0.12);
+  --btn-scan-border: rgba(12, 163, 12, 0.38);
   --accent-wash: rgba(42, 120, 214, 0.1);
   --shadow-md: 0 1px 2px rgba(11, 11, 11, 0.04), 0 16px 32px -12px rgba(11, 11, 11, 0.12);
 
@@ -54,6 +62,10 @@
     --cat-custom: #9085e9;
 
     --accent: #3987e5;
+    --logo-candle: #e66767;
+    --logo-bg: rgba(12, 163, 12, 0.22);
+    --btn-scan-bg: rgba(12, 163, 12, 0.22);
+    --btn-scan-border: rgba(12, 163, 12, 0.45);
     --accent-wash: rgba(57, 135, 229, 0.14);
     --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 32px -12px rgba(0, 0, 0, 0.45);
   }

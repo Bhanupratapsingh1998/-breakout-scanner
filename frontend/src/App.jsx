@@ -1,14 +1,27 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import {
+  createChart, CandlestickSeries, HistogramSeries, createSeriesMarkers, LineStyle,
+} from 'lightweight-charts'
 
 const CUSTOM_STORAGE_KEY = 'breakout-scanner:custom-symbols'
 
 function Logo({ size = 22 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="3" y="14" width="3.2" height="7" rx="0.6" fill="currentColor" opacity="0.35" />
-      <rect x="8.4" y="10" width="3.2" height="11" rx="0.6" fill="currentColor" opacity="0.6" />
-      <rect x="13.8" y="6" width="3.2" height="15" rx="0.6" fill="currentColor" />
+      <rect x="3" y="14" width="3.2" height="7" rx="0.6" fill="var(--logo-candle)" opacity="0.45" />
+      <rect x="8.4" y="10" width="3.2" height="11" rx="0.6" fill="var(--logo-candle)" opacity="0.7" />
+      <rect x="13.8" y="6" width="3.2" height="15" rx="0.6" fill="var(--logo-candle)" />
       <path d="M17.5 8.5L21.5 3M21.5 3H17.7M21.5 3V6.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function ExpandIcon({ size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 3h6v6M21 3l-7 7M9 21H3v-6M3 21l7-7" />
     </svg>
   )
 }
@@ -17,7 +30,7 @@ function LogoBadge({ size = 36 }) {
   return (
     <div
       className="flex shrink-0 items-center justify-center rounded-xl"
-      style={{ width: size, height: size, background: 'var(--accent-wash)', color: 'var(--accent)' }}
+      style={{ width: size, height: size, background: 'var(--logo-bg)', color: 'var(--accent)' }}
     >
       <Logo size={size * 0.52} />
     </div>
@@ -35,14 +48,57 @@ function MiniStat({ label, value }) {
   )
 }
 
-const RATING_META = {
-  STRONG: { color: 'var(--status-good)', icon: '🔥', label: 'STRONG' },
-  GOOD: { color: 'var(--cat-next50)', icon: '🟢', label: 'GOOD' },
-  WATCH: { color: 'var(--status-warning)', icon: '🟡', label: 'WATCH' },
-  REJECTED: { color: 'var(--status-critical)', icon: '❌', label: 'REJECTED' },
+/**
+ * One decision vocabulary shared by the Breakout and Reversal views. The analyzers emit
+ * finer-grained classifications (BUY NOW / WAIT FOR PULLBACK / HIGH_QUALITY_REVERSAL / …);
+ * this collapses every one of them onto the only question a table row needs to answer — act,
+ * hold, or skip. The per-check breakdown is still in the detail panel, so the nuance is one
+ * click away rather than competing for attention in the row.
+ *
+ * Near Breakout deliberately does NOT use this: nothing there has broken out yet, so every row
+ * would read WAIT. That view keeps its own readiness scale (see NEAR_BREAKOUT_META).
+ */
+const DECISION_META = {
+  'BUY NOW': { color: 'var(--status-good)', label: 'BUY NOW' },
+  WAIT: { color: 'var(--status-warning)', label: 'WAIT' },
+  REJECT: { color: 'var(--status-critical)', label: 'REJECT' },
 }
 
-const TIERS = ['ALL', 'STRONG', 'GOOD', 'WATCH', 'REJECTED']
+const DECISIONS = ['ALL', 'BUY NOW', 'WAIT', 'REJECT']
+
+/**
+ * Any analyzer classification, breakout or reversal, mapped onto the shared three.
+ *
+ * Every value the backend actually emits is listed explicitly, including the near-breakout
+ * readiness levels. The Near Breakout view renders NEAR_BREAKOUT_META rather than a decision
+ * (each of its rows is structurally WAIT, so the column would say nothing), but leaving those
+ * values to the default branch would quietly turn an entire watchlist into rejects.
+ */
+function decisionOf(classification) {
+  switch (classification) {
+    case 'BUY NOW':
+    case 'HIGH_QUALITY_REVERSAL':
+    case 'GOOD_REVERSAL':
+      return 'BUY NOW'
+    case 'WAIT FOR PULLBACK':
+    case 'WAIT FOR BREAKOUT/RETEST':
+    case 'AVOID CHASING':
+    case 'WATCH':
+    case 'WAIT_FOR_CONFIRMATION':
+    case 'COILING':
+    case 'TIGHTENING':
+    case 'NEAR':
+      return 'WAIT'
+    case 'REJECTED':
+    case 'CONFIRMED_BUT_NOT_TRADEABLE':
+      return 'REJECT'
+    default:
+      // Reaching here means the backend vocabulary drifted. REJECT is the safe direction: an
+      // unrecognised classification must never earn a green light.
+      return 'REJECT'
+  }
+}
+
 const UNIVERSES = [
   { key: 'ALL', label: 'All' },
   { key: 'NIFTY_50', label: 'Nifty 50', color: 'var(--cat-nifty50)' },
@@ -60,32 +116,12 @@ function Dot({ color, size = 8 }) {
   )
 }
 
-function RatingBadge({ tier }) {
-  const meta = RATING_META[tier] ?? RATING_META.WATCH
+function DecisionBadge({ classification }) {
+  const meta = DECISION_META[decisionOf(classification)]
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
       <Dot color={meta.color} size={7} />
-      <span>{meta.icon} {meta.label}</span>
-    </span>
-  )
-}
-
-// Entry-timing verdict — separate from RATING_META above. A stock can be a 10/10 setup
-// (STRONG rating) and still be a bad ENTRY right now (AVOID CHASING classification).
-const CLASSIFICATION_META = {
-  'BUY NOW': { color: 'var(--status-good)', icon: '🟢', label: 'BUY NOW' },
-  'WAIT FOR PULLBACK': { color: 'var(--status-warning)', icon: '🟡', label: 'WAIT FOR PULLBACK' },
-  'WAIT FOR BREAKOUT/RETEST': { color: 'var(--status-warning)', icon: '🟡', label: 'WAIT FOR BREAKOUT/RETEST' },
-  'AVOID CHASING': { color: 'var(--status-critical)', icon: '🔴', label: 'AVOID CHASING' },
-  REJECTED: { color: 'var(--status-critical)', icon: '🔴', label: 'REJECTED' },
-}
-
-function ClassificationBadge({ classification }) {
-  const meta = CLASSIFICATION_META[classification] ?? CLASSIFICATION_META.REJECTED
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
-      <Dot color={meta.color} size={7} />
-      <span>{meta.icon} {meta.label}</span>
+      <span>{meta.label}</span>
     </span>
   )
 }
@@ -97,10 +133,10 @@ const EXHAUSTION_META = {
 }
 
 const BREAKOUT_STATUS_META = {
-  CONFIRMED_HOLDING: { color: 'var(--status-good)', icon: '🟢', label: 'CONFIRMED & HOLDING' },
-  CONFIRMED_RETESTING: { color: 'var(--status-warning)', icon: '🟡', label: 'CONFIRMED — RETESTING' },
-  FAILED: { color: 'var(--status-critical)', icon: '🔴', label: 'FAILED' },
-  NOT_CONFIRMED: { color: 'var(--status-critical)', icon: '🔴', label: 'NOT CONFIRMED' },
+  CONFIRMED_HOLDING: { color: 'var(--status-good)', label: 'CONFIRMED & HOLDING' },
+  CONFIRMED_RETESTING: { color: 'var(--status-warning)', label: 'CONFIRMED — RETESTING' },
+  FAILED: { color: 'var(--status-critical)', label: 'FAILED' },
+  NOT_CONFIRMED: { color: 'var(--status-critical)', label: 'NOT CONFIRMED' },
 }
 
 function BreakoutStatusBadge({ status }) {
@@ -108,7 +144,7 @@ function BreakoutStatusBadge({ status }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
       <Dot color={meta.color} size={7} />
-      <span>{meta.icon} {meta.label}</span>
+      <span>{meta.label}</span>
     </span>
   )
 }
@@ -426,7 +462,7 @@ function EntryQualityPanel({ row }) {
         </h4>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <BreakoutStatusBadge status={row.breakoutStatus} />
-          <ClassificationBadge classification={row.classification} />
+          <DecisionBadge classification={row.classification} />
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -486,6 +522,7 @@ function DetailPanel({ row }) {
   const extras = Object.entries(row.values).filter(([k]) => !KNOWN_VALUE_KEYS.has(k))
   const [chartBars, setChartBars] = useState(null)
   const [chartError, setChartError] = useState(null)
+  const [fullChart, setFullChart] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -508,24 +545,44 @@ function DetailPanel({ row }) {
       <OhlcStrip values={row.values} />
 
       <div>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-          Price Chart
-        </h4>
+        <div className="mb-2 flex items-center justify-between">
+          <h4 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Price Chart
+          </h4>
+          <button
+            onClick={() => setFullChart(true)}
+            className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-opacity hover:opacity-70"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          >
+            <ExpandIcon /> Full chart
+          </button>
+        </div>
         {chartError ? (
           <p className="text-sm" style={{ color: 'var(--status-serious)' }}>{chartError}</p>
         ) : chartBars ? (
-          <CandlestickChart
-            bars={chartBars}
-            resistance={row.values['Prev resistance']}
-            breakoutConfirmLevel={row.values['Breakout Confirm Level']}
-            breakoutBarTime={row.values['Breakout Bar Time']}
-          />
+          <div
+            role="button"
+            tabIndex={0}
+            title="Open full chart"
+            onClick={() => setFullChart(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFullChart(true) }
+            }}
+          >
+            <CandlestickChart
+              bars={chartBars}
+              resistance={row.values['Prev resistance']}
+              breakoutConfirmLevel={row.values['Breakout Confirm Level']}
+              breakoutBarTime={row.values['Breakout Bar Time']}
+            />
+          </div>
         ) : (
           <div className="flex items-center justify-center text-sm" style={{ height: 200, color: 'var(--text-muted)' }}>
             Loading chart…
           </div>
         )}
       </div>
+      {fullChart && <FullChartModal row={row} onClose={() => setFullChart(false)} />}
 
       <TrendLadder values={row.values} />
       <TradePlan values={row.values} />
@@ -652,10 +709,11 @@ function ViewTabs({ view, setView, reversalCount, nearBreakoutCount }) {
   )
 }
 
+/** Readiness, not a decision — every row in this view is by definition still waiting. */
 const NEAR_BREAKOUT_META = {
-  COILING: { color: 'var(--status-good)', icon: '🔥', label: 'COILING' },
-  TIGHTENING: { color: 'var(--cat-next50)', icon: '🟢', label: 'TIGHTENING' },
-  NEAR: { color: 'var(--status-warning)', icon: '🟡', label: 'NEAR' },
+  COILING: { color: 'var(--status-good)', label: 'COILING' },
+  TIGHTENING: { color: 'var(--cat-next50)', label: 'TIGHTENING' },
+  NEAR: { color: 'var(--status-warning)', label: 'NEAR' },
 }
 
 function NearBreakoutBadge({ classification }) {
@@ -663,7 +721,7 @@ function NearBreakoutBadge({ classification }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
       <Dot color={meta.color} size={7} />
-      <span>{meta.icon} {meta.label}</span>
+      <span>{meta.label}</span>
     </span>
   )
 }
@@ -681,7 +739,7 @@ function NearBreakoutTable({ rows }) {
         <thead>
           <tr style={{ borderBottom: `1px solid ${'var(--gridline)'}` }}>
             <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Symbol</th>
-            <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Classification</th>
+            <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Readiness</th>
             <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Close</th>
             <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Resistance</th>
             <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Distance</th>
@@ -734,25 +792,6 @@ const SETUP_TYPE_META = {
   REVERSAL_SETUP: { label: 'Reversal', color: 'var(--cat-next50)' },
 }
 
-const REVERSAL_CLASSIFICATION_META = {
-  HIGH_QUALITY_REVERSAL: { color: 'var(--status-good)', icon: '🔥', label: 'HIGH QUALITY' },
-  GOOD_REVERSAL: { color: 'var(--cat-next50)', icon: '🟢', label: 'GOOD' },
-  WATCH: { color: 'var(--status-warning)', icon: '🟡', label: 'WATCH' },
-  WAIT_FOR_CONFIRMATION: { color: 'var(--status-warning)', icon: '🟡', label: 'WAIT FOR CONFIRMATION' },
-  CONFIRMED_BUT_NOT_TRADEABLE: { color: 'var(--status-critical)', icon: '🔴', label: 'NOT TRADEABLE' },
-  REJECTED: { color: 'var(--status-critical)', icon: '🔴', label: 'REJECTED' },
-}
-
-function ReversalClassificationBadge({ classification }) {
-  const meta = REVERSAL_CLASSIFICATION_META[classification] ?? REVERSAL_CLASSIFICATION_META.WATCH
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
-      <Dot color={meta.color} size={7} />
-      <span>{meta.icon} {meta.label}</span>
-    </span>
-  )
-}
-
 const REVERSAL_SORT_KEYS = {
   score: (r) => r.candlestickScore,
   rr: (r) => r.riskReward ?? -Infinity,
@@ -803,7 +842,7 @@ function ReversalTable({ rows }) {
             <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Stop</th>
             <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Target</th>
             {sortHeader('rr', 'R:R')}
-            <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Classification</th>
+            <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Decision</th>
           </tr>
         </thead>
         <tbody>
@@ -853,7 +892,7 @@ function ReversalTable({ rows }) {
                   {row.riskReward != null ? `${row.riskReward.toFixed(2)}:1` : '—'}
                 </td>
                 <td className="px-3 py-2.5">
-                  <ReversalClassificationBadge classification={row.classification} />
+                  <DecisionBadge classification={row.classification} />
                 </td>
               </tr>
             )
@@ -1167,6 +1206,300 @@ function CandlestickChart({ bars, resistance, breakoutConfirmLevel, breakoutBarT
     </div>
   )
 }
+
+// Every entry is a range Yahoo still serves at daily granularity, so the candles on screen are
+// always the same bars the scan's levels were computed from. (Its "max" range is not: it comes
+// back as monthly candles regardless of the interval requested, so 10Y is as far back as we go.)
+const CHART_RANGES = [
+  { key: '1mo', label: '1M' },
+  { key: '3mo', label: '3M' },
+  { key: '6mo', label: '6M' },
+  { key: '1y', label: '1Y' },
+  { key: '5y', label: '5Y' },
+  { key: '10y', label: '10Y' },
+]
+
+/** Lightweight Charts needs concrete color strings, so the themed custom properties get resolved. */
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
+
+/** Volume bars sit under the candles, so they take the same hue at reduced weight. */
+function withAlpha(color, aa) {
+  return /^#[0-9a-f]{6}$/i.test(color) ? color + aa : color
+}
+
+function chartTheme() {
+  const muted = cssVar('--text-muted', '#898781')
+  const grid = cssVar('--gridline', '#e1e0d9')
+  const accent = cssVar('--accent', '#2a78d6')
+  return {
+    layout: { background: { color: cssVar('--surface-1', '#ffffff') }, textColor: muted },
+    grid: { vertLines: { color: grid }, horzLines: { color: grid } },
+    rightPriceScale: { borderColor: grid },
+    timeScale: { borderColor: grid },
+    crosshair: {
+      vertLine: { color: muted, labelBackgroundColor: accent },
+      horzLine: { color: muted, labelBackgroundColor: accent },
+    },
+  }
+}
+
+/**
+ * Fullscreen price chart in the style of a broker app — timeframe tabs, a crosshair OHLC readout,
+ * real pan/zoom — with this scan's own levels drawn on top. Uses TradingView's Lightweight Charts;
+ * the inline `CandlestickChart` above stays hand-rolled SVG because at 700px it only ever needs to
+ * be glanced at, whereas this one is meant to be worked in.
+ */
+function FullChartModal({ row, onClose }) {
+  const symbol = row.symbol
+  const resistance = row.values['Prev resistance']
+  const breakoutConfirmLevel = row.values['Breakout Confirm Level']
+  const breakoutBarTime = row.values['Breakout Bar Time']
+
+  const [range, setRange] = useState('6mo')
+  const [bars, setBars] = useState(null)
+  const [error, setError] = useState(null)
+  const [hover, setHover] = useState(null)
+
+  const containerRef = useRef(null)
+  const chartRef = useRef(null)
+  const candleRef = useRef(null)
+  const volumeRef = useRef(null)
+  const markersRef = useRef(null)
+  const priceLinesRef = useRef([])
+
+  // Esc closes; the page behind must not scroll while the overlay is up.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [onClose])
+
+  useEffect(() => {
+    let cancelled = false
+    setBars(null)
+    setError(null)
+    fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&range=${range}`)
+      .then((r) => r.json())
+      .then((body) => {
+        if (cancelled) return
+        if (body.error) setError(body.error)
+        else setBars(body.bars)
+      })
+      .catch((e) => { if (!cancelled) setError(e.message || 'Could not load chart') })
+    return () => { cancelled = true }
+  }, [symbol, range])
+
+  // Built once. Timeframe switches only replace series data below, so the chart instance — and
+  // the user's pan/zoom — survives them.
+  useEffect(() => {
+    const up = cssVar('--status-good', '#0ca30c')
+    const down = cssVar('--status-critical', '#d13438')
+
+    const chart = createChart(containerRef.current, { autoSize: true, ...chartTheme() })
+    const candles = chart.addSeries(CandlestickSeries, {
+      upColor: up, downColor: down,
+      borderUpColor: up, borderDownColor: down,
+      wickUpColor: up, wickDownColor: down,
+    })
+    candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.28 } })
+
+    const volume = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: 'volume' },
+      priceScaleId: '',            // overlay scale, so volume keeps its own strip at the bottom
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
+
+    markersRef.current = createSeriesMarkers(candles, [])
+
+    chart.subscribeCrosshairMove((param) => {
+      const candle = param.seriesData && param.seriesData.get(candles)
+      if (!candle) { setHover(null); return }
+      const vol = param.seriesData.get(volume)
+      setHover({ ...candle, time: param.time, volume: vol ? vol.value : null })
+    })
+
+    chartRef.current = chart
+    candleRef.current = candles
+    volumeRef.current = volume
+    return () => {
+      chart.remove()
+      chartRef.current = null
+      candleRef.current = null
+      volumeRef.current = null
+      markersRef.current = null
+      priceLinesRef.current = []
+    }
+  }, [])
+
+  // The app follows the OS color scheme rather than an in-app toggle, so re-theme on that change.
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => {
+      if (!chartRef.current) return
+      chartRef.current.applyOptions(chartTheme())
+      const up = cssVar('--status-good', '#0ca30c')
+      const down = cssVar('--status-critical', '#d13438')
+      candleRef.current.applyOptions({
+        upColor: up, downColor: down,
+        borderUpColor: up, borderDownColor: down,
+        wickUpColor: up, wickDownColor: down,
+      })
+    }
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  useEffect(() => {
+    if (!bars || !candleRef.current) return
+    const candles = candleRef.current
+    const up = cssVar('--status-good', '#0ca30c')
+    const down = cssVar('--status-critical', '#d13438')
+
+    candles.setData(bars.map((b) => ({
+      time: b.time, open: b.open, high: b.high, low: b.low, close: b.close,
+    })))
+    volumeRef.current.setData(bars.map((b) => ({
+      time: b.time,
+      value: b.volume,
+      color: withAlpha(b.close >= b.open ? up : down, '66'),
+    })))
+
+    // Levels belong to the series, so replacing series data drops them — re-add each time.
+    priceLinesRef.current.forEach((line) => candles.removePriceLine(line))
+    priceLinesRef.current = []
+    const addLevel = (price, color, title) => {
+      if (price == null) return
+      priceLinesRef.current.push(candles.createPriceLine({
+        price, color, title, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,
+      }))
+    }
+    addLevel(resistance, cssVar('--status-warning', '#c98500'), 'Resistance')
+    addLevel(breakoutConfirmLevel, up, 'Confirms')
+
+    // A short timeframe can start after the breakout bar, in which case there is nothing to mark.
+    const hasBreakoutBar = breakoutBarTime != null && bars.some((b) => b.time === breakoutBarTime)
+    markersRef.current.setMarkers(hasBreakoutBar ? [{
+      time: breakoutBarTime,
+      position: 'aboveBar',
+      color: cssVar('--accent', '#2a78d6'),
+      shape: 'arrowDown',
+      text: 'Breakout',
+    }] : [])
+
+    chartRef.current.timeScale().fitContent()
+  }, [bars, resistance, breakoutConfirmLevel, breakoutBarTime])
+
+  const last = bars && bars.length ? bars[bars.length - 1] : null
+  const prev = bars && bars.length > 1 ? bars[bars.length - 2] : null
+  const change = last && prev ? last.close - prev.close : null
+  const changePct = change != null && prev.close ? (change / prev.close) * 100 : null
+  const changeColor = change == null ? 'var(--text-muted)'
+    : change >= 0 ? 'var(--status-good)' : 'var(--status-critical)'
+
+  const shown = hover || last
+  const dateLabel = (t) => new Date(t * 1000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  // Portalled to <body>: the detail panel that opens this sits inside a <td>, and a fullscreen
+  // overlay has no business inheriting the table's stacking and overflow context.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ background: 'var(--surface-1)' }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${symbol} price chart`}
+    >
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3" style={{ borderColor: 'var(--gridline)' }}>
+        <div>
+          <div className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{symbol}</div>
+          {last && (
+            <div className="tabular flex items-baseline gap-2 text-sm">
+              <span style={{ color: 'var(--text-primary)' }}>{fmtPrice(last.close)}</span>
+              {changePct != null && (
+                <span style={{ color: changeColor }}>
+                  {change >= 0 ? '+' : ''}{fmtPrice(change)} ({change >= 0 ? '+' : ''}{changePct.toFixed(2)}%)
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-1">
+          {CHART_RANGES.map((r) => (
+            <FilterPill key={r.key} active={range === r.key} onClick={() => setRange(r.key)}>
+              {r.label}
+            </FilterPill>
+          ))}
+        </div>
+
+        <div className="ml-auto flex items-center gap-3">
+          <span className="hidden text-xs sm:inline" style={{ color: 'var(--text-muted)' }}>Esc to close</span>
+          <button
+            onClick={onClose}
+            className="rounded-md border px-2.5 py-1 text-sm transition-opacity hover:opacity-70"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+            aria-label="Close chart"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div className="relative flex-1">
+        <div ref={containerRef} className="absolute inset-0" />
+
+        {shown && (
+          <div
+            className="pointer-events-none absolute left-3 top-3 z-10 rounded-lg border px-2.5 py-1.5 text-xs shadow-sm"
+            style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', color: 'var(--text-primary)' }}
+          >
+            <div className="font-semibold">{dateLabel(shown.time)}</div>
+            <div className="tabular" style={{ color: 'var(--text-muted)' }}>
+              O {fmtPrice(shown.open)} H {fmtPrice(shown.high)} L {fmtPrice(shown.low)} C {fmtPrice(shown.close)}
+            </div>
+            {shown.volume != null && (
+              <div className="tabular" style={{ color: 'var(--text-secondary)' }}>Vol {fmtVolume(shown.volume)}</div>
+            )}
+          </div>
+        )}
+
+        {(error || !bars) && (
+          <div
+            className="absolute inset-0 z-20 flex items-center justify-center text-sm"
+            style={{ background: 'var(--surface-1)', color: error ? 'var(--status-serious)' : 'var(--text-muted)' }}
+          >
+            {error || 'Loading chart…'}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t px-4 py-2 text-xs" style={{ borderColor: 'var(--gridline)', color: 'var(--text-secondary)' }}>
+        {resistance != null && (
+          <span className="flex items-center gap-1.5"><Dot color="var(--status-warning)" size={7} /> Resistance {fmtPrice(resistance)}</span>
+        )}
+        {breakoutConfirmLevel != null && (
+          <span className="flex items-center gap-1.5"><Dot color="var(--status-good)" size={7} /> Confirms {fmtPrice(breakoutConfirmLevel)}</span>
+        )}
+        {breakoutBarTime != null && (
+          <span className="flex items-center gap-1.5"><Dot color="var(--accent)" size={7} /> Breakout bar {dateLabel(breakoutBarTime)}</span>
+        )}
+        <span className="ml-auto" style={{ color: 'var(--text-muted)' }}>Daily candles · Yahoo Finance</span>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 
 /** Win/loss split as a single proportion bar — two status colors, direct labels, no legend box
  *  needed (each segment carries its own label + dot, so identity is never color-alone). */
@@ -1679,7 +2012,7 @@ export default function App() {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [view, setView] = useState('breakout')
-  const [tier, setTier] = useState('ALL')
+  const [decision, setDecision] = useState('ALL')
   const [universe, setUniverse] = useState('ALL')
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState(null)
@@ -1791,7 +2124,7 @@ export default function App() {
 
   const rows = useMemo(() => {
     let r = allRows
-    if (tier !== 'ALL') r = r.filter((row) => row.rating === tier)
+    if (decision !== 'ALL') r = r.filter((row) => decisionOf(row.classification) === decision)
     if (universe !== 'ALL') r = r.filter((row) => (row.universe ?? 'NIFTY_50') === universe)
     if (query.trim()) {
       const q = query.trim().toUpperCase()
@@ -1803,12 +2136,13 @@ export default function App() {
       const diff = sortDesc ? b.setupScore - a.setupScore : a.setupScore - b.setupScore
       return diff !== 0 ? diff : (sortDesc ? b.entryScore - a.entryScore : a.entryScore - b.entryScore)
     })
-  }, [allRows, tier, universe, query, sortDesc])
+  }, [allRows, decision, universe, query, sortDesc])
 
   const counts = useMemo(
     () =>
       allRows.reduce((acc, r) => {
-        acc[r.rating] = (acc[r.rating] ?? 0) + 1
+        const d = decisionOf(r.classification)
+        acc[d] = (acc[d] ?? 0) + 1
         return acc
       }, {}),
     [allRows]
@@ -1925,11 +2259,11 @@ export default function App() {
             <button
               onClick={refreshAll}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-opacity disabled:opacity-60"
-              style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', color: 'var(--text-primary)' }}
+              className="flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-60"
+              style={{ borderColor: 'var(--btn-scan-border)', background: 'var(--btn-scan-bg)', color: 'var(--text-primary)' }}
             >
               <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>&#8635;</span>
-              {refreshing ? 'Refreshing…' : 'Refresh All'}
+              {refreshing ? 'Scanning…' : 'Scan Stocks'}
             </button>
             {refreshing && refreshProgress && (
               <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{refreshProgress}</span>
@@ -1943,10 +2277,9 @@ export default function App() {
         {view === 'breakout' && (
           <div className="mb-6 flex flex-wrap gap-3">
             <StatTile label="Scanned" value={allRows.length} />
-            <StatTile label="Strong" value={counts.STRONG ?? 0} color="var(--status-good)" />
-            <StatTile label="Good" value={counts.GOOD ?? 0} color="var(--cat-next50)" />
-            <StatTile label="Watch" value={counts.WATCH ?? 0} color="var(--status-warning)" />
-            <StatTile label="Rejected" value={counts.REJECTED ?? 0} color="var(--status-critical)" />
+            <StatTile label="Buy Now" value={counts['BUY NOW'] ?? 0} color="var(--status-good)" />
+            <StatTile label="Wait" value={counts.WAIT ?? 0} color="var(--status-warning)" />
+            <StatTile label="Reject" value={counts.REJECT ?? 0} color="var(--status-critical)" />
           </div>
         )}
         {view === 'reversal' && (
@@ -2017,11 +2350,11 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Rating</span>
+            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Decision</span>
             <div className="flex gap-1.5">
-              {TIERS.map((t) => (
-                <FilterPill key={t} active={tier === t} onClick={() => setTier(t)}>
-                  {t === 'ALL' ? 'All' : t}
+              {DECISIONS.map((d) => (
+                <FilterPill key={d} active={decision === d} onClick={() => setDecision(d)}>
+                  {d === 'ALL' ? 'All' : d}
                 </FilterPill>
               ))}
             </div>
@@ -2048,7 +2381,6 @@ export default function App() {
                 >
                   Setup / Entry {sortDesc ? '↓' : '↑'}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Rating</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Decision</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Close</th>
                 <th className="px-4 py-3" />
@@ -2080,10 +2412,7 @@ export default function App() {
                       S {row.setupScore}/{row.setupTotal} &middot; E {row.entryScore}/{row.entryTotal}
                     </td>
                     <td className="px-4 py-2.5">
-                      <RatingBadge tier={row.rating} />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <ClassificationBadge classification={row.classification} />
+                      <DecisionBadge classification={row.classification} />
                     </td>
                     <td className="tabular px-4 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>{row.values.Close?.toFixed(2)}</td>
                     <td className="px-4 py-2.5 text-right">
