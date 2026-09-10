@@ -7,8 +7,6 @@ import com.javawarriors.breakout.marketdata.NiftyUniverse;
 import com.javawarriors.breakout.marketdata.NseIndexSource;
 import com.javawarriors.breakout.marketdata.YahooDataSource;
 import com.javawarriors.breakout.model.Bar;
-import com.javawarriors.breakout.nearbreakout.NearBreakoutAnalyzer;
-import com.javawarriors.breakout.nearbreakout.NearBreakoutResult;
 import com.javawarriors.breakout.tradesetup.TradeSetupAnalyzer;
 import com.javawarriors.breakout.tradesetup.TradeSetupResult;
 
@@ -26,7 +24,6 @@ public class ScanService {
 
     private final BreakoutAnalyzer analyzer = new BreakoutAnalyzer();
     private final TradeSetupAnalyzer tradeSetupAnalyzer = new TradeSetupAnalyzer();
-    private final NearBreakoutAnalyzer nearBreakoutAnalyzer = new NearBreakoutAnalyzer();
     private final YahooDataSource source = new YahooDataSource();
 
     private final AtomicBoolean scanRunning = new AtomicBoolean(false);
@@ -43,7 +40,7 @@ public class ScanService {
             try {
                 ScanRunner.ScanOutcome outcome = ScanRunner.runFullScan(scanProgress::set);
                 Map<String, Object> payload = ScanRunner.buildPayload(outcome.results(), outcome.reversals(),
-                        outcome.nearBreakouts(), outcome.universeSize(), outcome.nifty500Names());
+                        outcome.universeSize(), outcome.nifty500Names());
                 lastResults.set(payload);
 
                 Map<String, Object> summary = new LinkedHashMap<>();
@@ -110,9 +107,6 @@ public class ScanService {
         if (!"REJECTED".equals(reversalSetup.classification)) {
             row.put("reversalSetup", reversalSetup.toRow(name, universe));
         }
-
-        NearBreakoutResult nearBreakout = nearBreakoutAnalyzer.analyze(symbol, bars);
-        if (nearBreakout != null) row.put("nearBreakout", nearBreakout.toRow(name, universe));
 
         return row;
     }
