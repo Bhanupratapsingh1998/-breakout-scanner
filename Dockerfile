@@ -32,4 +32,7 @@ COPY --from=build /app/target/breakout-scanner.jar app.jar
 #   docker run -e DB_URL=... -e DB_USER=... -e DB_PASSWORD=... -p 9111:9111 breakout-scanner
 
 EXPOSE 9111
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# MaxRAMPercentage rather than a fixed -Xmx: the JVM reads the container limit, so this
+# adapts to whatever the host allocates. Without it Java 17 caps the heap at ~25% of the
+# container, which is tight on a 512MB instance while a 500-stock scan is held in memory.
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]
