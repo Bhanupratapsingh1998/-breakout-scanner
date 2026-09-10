@@ -27,9 +27,9 @@ FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 COPY --from=build /app/target/breakout-scanner.jar app.jar
 
-# H2 trade-journal store lives at ./data relative to the working dir (see
-# application.properties) — keep it in a volume so it survives container restarts.
-VOLUME ["/app/data"]
+# No volume: the trade journal lives in Neon Postgres, so the container is stateless. Supply the
+# datasource at run time, e.g.
+#   docker run -e DB_URL=... -e DB_USER=... -e DB_PASSWORD=... -p 9111:9111 breakout-scanner
 
 EXPOSE 9111
 ENTRYPOINT ["java", "-jar", "app.jar"]
