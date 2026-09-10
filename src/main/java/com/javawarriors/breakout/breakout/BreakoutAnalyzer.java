@@ -458,6 +458,22 @@ public class BreakoutAnalyzer {
         r.addCheck("J. Within " + (int) maxExtensionPct + "% of breakout",
                 hasBrokenOut && extensionPct <= maxExtensionPct, 1, GATE);
 
+        // ---- Distance from the mean. Gate J caps distance above the BREAKOUT LEVEL, but that
+        // level rises with every new high, so it cannot see a stock that is 40% above its 200 EMA
+        // after a 60% run. This can, and it is measured in ATRs so the threshold travels across
+        // quiet and volatile names alike.
+        double close63 = n > 63 ? close[n - 1 - 63] : Double.NaN;
+        StretchFromMean stretch = StretchFromMean.analyze(price, ema50[n - 1], ema200[n - 1],
+                atrVal, close63);
+        r.stretch = stretch;
+
+        // ---- Quality of the breakout candle itself. The volume gate says how many participated;
+        // this says who won the day. Computed for every stock that has a confirmed breakout bar,
+        // and currently reported rather than gated — see BreakoutBarQuality.
+        BreakoutBarQuality barQuality = BreakoutBarQuality.analyze(
+                bars, breakoutBarIndex, breakoutBarIndex >= 0 ? atr[breakoutBarIndex] : Double.NaN);
+        r.barQuality = barQuality;
+
         // ---- Breakout follow-through: did the breakout hold, is it being retested, or has it
         // failed outright (fallen back below the resistance it broke, not just the confirm buffer)?
         String breakoutStatus;
@@ -485,7 +501,10 @@ public class BreakoutAnalyzer {
         } else if (!r.passedAllGates() || setupScore < 8) {
             classification = "REJECTED";
         } else if (entryScore >= 7 && !"HIGH".equals(exhaustionRisk) && sufficientResistanceRoom
+                && !stretch.isChase()
                 && !Double.isNaN(riskReward) && riskReward >= minRiskReward) {
+            // Note the chase check withholds BUY NOW rather than rejecting: the setup is real, the
+            // price is not, so it falls through to WAIT FOR PULLBACK and stays on the watchlist.
             classification = "BUY NOW";
         } else if (entryScore >= 4) {
             classification = "WAIT FOR PULLBACK";
@@ -546,6 +565,24 @@ public class BreakoutAnalyzer {
             // The bar the breakout was actually confirmed on — lets a chart mark exactly where
             // it happened, not just report the fact that it did.
             if (breakoutBarIndex >= 0) r.values.put("Breakout Bar Time", (double) bars.get(breakoutBarIndex).time());
+            if (stretch.isKnown()) {
+                r.values.put("Stretch Above EMA50 (ATRs)", stretch.atrsAboveEma50());
+                r.values.put("Stretch Above EMA50 %", stretch.pctAboveEma50());
+                if (!Double.isNaN(stretch.pctAboveEma200())) {
+                    r.values.put("Stretch Above EMA200 %", stretch.pctAboveEma200());
+                }
+                if (!Double.isNaN(stretch.runUp63d())) {
+                    r.values.put("Run-up (63d) %", stretch.runUp63d());
+                }
+            }
+            if (barQuality.isKnown()) {
+                r.values.put("Breakout Bar Close Position %", barQuality.closePosition() * 100);
+                r.values.put("Breakout Bar Body %", barQuality.bodyRatio() * 100);
+                r.values.put("Breakout Bar Upper Wick %", barQuality.upperWickRatio() * 100);
+                if (!Double.isNaN(barQuality.rangeVsAtr())) {
+                    r.values.put("Breakout Bar Range vs ATR", barQuality.rangeVsAtr());
+                }
+            }
         }
         if (!Double.isNaN(stockReturn)) r.values.put("Stock Return (20d) %", stockReturn * 100);
         if (benchReturn != null) r.values.put("Benchmark Return (20d) %", benchReturn * 100);
