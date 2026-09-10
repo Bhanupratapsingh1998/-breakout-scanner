@@ -7,8 +7,6 @@ import com.javawarriors.breakout.marketdata.NiftyUniverse;
 import com.javawarriors.breakout.marketdata.NseIndexSource;
 import com.javawarriors.breakout.marketdata.YahooDataSource;
 import com.javawarriors.breakout.model.Bar;
-import com.javawarriors.breakout.nearbreakout.NearBreakoutAnalyzer;
-import com.javawarriors.breakout.nearbreakout.NearBreakoutResult;
 import com.javawarriors.breakout.tradesetup.TradeSetupAnalyzer;
 import com.javawarriors.breakout.tradesetup.TradeSetupResult;
 
@@ -27,8 +25,7 @@ public class ScanRunner {
 
     public record ScanOutcome(
             List<BreakoutResult> results, List<TradeSetupResult> reversals,
-            List<NearBreakoutResult> nearBreakouts, int failed, int universeSize,
-            Map<String, String> nifty500Names) {}
+            int failed, int universeSize, Map<String, String> nifty500Names) {}
 
     /** Symbol -> tier: NIFTY_50, NEXT_50, or NIFTY_500. */
     public static String universeOf(String symbol) {
@@ -62,11 +59,9 @@ public class ScanRunner {
         List<String> watchlist = buildWatchlist(nifty500Names);
         BreakoutAnalyzer analyzer = new BreakoutAnalyzer();
         TradeSetupAnalyzer tradeSetupAnalyzer = new TradeSetupAnalyzer();
-        NearBreakoutAnalyzer nearBreakoutAnalyzer = new NearBreakoutAnalyzer();
         YahooDataSource source = new YahooDataSource();
         List<BreakoutResult> results = new ArrayList<>();
         List<TradeSetupResult> reversals = new ArrayList<>();
-        List<NearBreakoutResult> nearBreakouts = new ArrayList<>();
         int failed = 0;
 
         for (int i = 0; i < watchlist.size(); i++) {
@@ -81,12 +76,10 @@ public class ScanRunner {
                 String universe = universeOf(symbol);
                 results.add(analyzer.analyze(symbol, bars, BenchmarkSource.barsFor(universe),
                         BenchmarkSource.displayName(universe)));
-                // Same fetched bars feed the reversal/candlestick and near-breakout layers too —
-                // no second round of requests.
+                // The same fetched bars feed the reversal/candlestick layer too — no second
+                // round of requests.
                 TradeSetupResult setup = tradeSetupAnalyzer.scoreReversalSetup(symbol, bars);
                 if (!"REJECTED".equals(setup.classification)) reversals.add(setup);
-                NearBreakoutResult nearBreakout = nearBreakoutAnalyzer.analyze(symbol, bars);
-                if (nearBreakout != null) nearBreakouts.add(nearBreakout);
             } catch (Exception e) {
                 failed++;
             }
@@ -102,14 +95,12 @@ public class ScanRunner {
             return t != 0 ? t : b.score() - a.score();
         });
         reversals.sort((a, b) -> b.candlestickScore - a.candlestickScore);
-        nearBreakouts.sort((a, b) -> Double.compare(a.distanceToResistancePct, b.distanceToResistancePct));
-        return new ScanOutcome(results, reversals, nearBreakouts, failed, watchlist.size(), nifty500Names);
+        return new ScanOutcome(results, reversals, failed, watchlist.size(), nifty500Names);
     }
 
     /** Builds the JSON-shaped result payload served by GET /api/results. */
     public static Map<String, Object> buildPayload(List<BreakoutResult> results, List<TradeSetupResult> reversals,
-                                                     List<NearBreakoutResult> nearBreakouts, int universeSize,
-                                                     Map<String, String> nifty500Names) {
+                                                     int universeSize, Map<String, String> nifty500Names) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (BreakoutResult r : results) {
             String name = nifty500Names.getOrDefault(r.symbol, NiftyUniverse.NAMES.getOrDefault(r.symbol, r.symbol));
@@ -122,18 +113,11 @@ public class ScanRunner {
             reversalOut.add(r.toRow(name, universeOf(r.symbol)));
         }
 
-        List<Map<String, Object>> nearBreakoutOut = new ArrayList<>();
-        for (NearBreakoutResult r : nearBreakouts) {
-            String name = nifty500Names.getOrDefault(r.symbol, NiftyUniverse.NAMES.getOrDefault(r.symbol, r.symbol));
-            nearBreakoutOut.add(r.toRow(name, universeOf(r.symbol)));
-        }
-
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("generatedAt", Instant.now().toString());
         payload.put("universe", universeSize);
         payload.put("results", out);
         payload.put("reversals", reversalOut);
-        payload.put("nearBreakouts", nearBreakoutOut);
         return payload;
     }
 }

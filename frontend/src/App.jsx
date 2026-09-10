@@ -54,9 +54,6 @@ function MiniStat({ label, value }) {
  * this collapses every one of them onto the only question a table row needs to answer — act,
  * hold, or skip. The per-check breakdown is still in the detail panel, so the nuance is one
  * click away rather than competing for attention in the row.
- *
- * Near Breakout deliberately does NOT use this: nothing there has broken out yet, so every row
- * would read WAIT. That view keeps its own readiness scale (see NEAR_BREAKOUT_META).
  */
 const DECISION_META = {
   'BUY NOW': { color: 'var(--status-good)', label: 'BUY NOW' },
@@ -67,12 +64,9 @@ const DECISION_META = {
 const DECISIONS = ['ALL', 'BUY NOW', 'WAIT', 'REJECT']
 
 /**
- * Any analyzer classification, breakout or reversal, mapped onto the shared three.
- *
- * Every value the backend actually emits is listed explicitly, including the near-breakout
- * readiness levels. The Near Breakout view renders NEAR_BREAKOUT_META rather than a decision
- * (each of its rows is structurally WAIT, so the column would say nothing), but leaving those
- * values to the default branch would quietly turn an entire watchlist into rejects.
+ * Any analyzer classification, breakout or reversal, mapped onto the shared three. Every value
+ * the backend emits is listed explicitly so the default branch stays a drift detector rather
+ * than a catch-all that silently rejects a classification nobody remembered to map.
  */
 function decisionOf(classification) {
   switch (classification) {
@@ -85,9 +79,6 @@ function decisionOf(classification) {
     case 'AVOID CHASING':
     case 'WATCH':
     case 'WAIT_FOR_CONFIRMATION':
-    case 'COILING':
-    case 'TIGHTENING':
-    case 'NEAR':
       return 'WAIT'
     case 'REJECTED':
     case 'CONFIRMED_BUT_NOT_TRADEABLE':
@@ -690,14 +681,11 @@ function FilterPill({ active, onClick, children }) {
 /** The Breakout Scanner / Near Breakout / Reversal Watch / Trade Journal tab row — shared by the
  *  main app shell AND the "no scan data yet" / "loading" screens, so every tab is reachable from
  *  anywhere, not just after a scan has completed. */
-function ViewTabs({ view, setView, reversalCount, nearBreakoutCount }) {
+function ViewTabs({ view, setView, reversalCount }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       <FilterPill active={view === 'breakout'} onClick={() => setView('breakout')}>
         Breakout Scanner
-      </FilterPill>
-      <FilterPill active={view === 'nearBreakout'} onClick={() => setView('nearBreakout')}>
-        Near Breakout{nearBreakoutCount > 0 ? ` (${nearBreakoutCount})` : ''}
       </FilterPill>
       <FilterPill active={view === 'reversal'} onClick={() => setView('reversal')}>
         Reversal Watch{reversalCount > 0 ? ` (${reversalCount})` : ''}
@@ -705,84 +693,6 @@ function ViewTabs({ view, setView, reversalCount, nearBreakoutCount }) {
       <FilterPill active={view === 'journal'} onClick={() => setView('journal')}>
         Trade Journal
       </FilterPill>
-    </div>
-  )
-}
-
-/** Readiness, not a decision — every row in this view is by definition still waiting. */
-const NEAR_BREAKOUT_META = {
-  COILING: { color: 'var(--status-good)', label: 'COILING' },
-  TIGHTENING: { color: 'var(--cat-next50)', label: 'TIGHTENING' },
-  NEAR: { color: 'var(--status-warning)', label: 'NEAR' },
-}
-
-function NearBreakoutBadge({ classification }) {
-  const meta = NEAR_BREAKOUT_META[classification] ?? NEAR_BREAKOUT_META.NEAR
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
-      <Dot color={meta.color} size={7} />
-      <span>{meta.label}</span>
-    </span>
-  )
-}
-
-/**
- * Stocks that HAVEN'T broken out yet but are coiling right under resistance — proximity +
- * volatility contraction + volume dry-up. Deliberately no entry/stop/target here: recommending
- * a price before the breakout is actually confirmed would be exactly the chasing this scanner
- * was built to avoid. Wait for it to show up in Breakout Scanner once confirmed.
- */
-function NearBreakoutTable({ rows }) {
-  return (
-    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-      <table className="w-full text-sm">
-        <thead>
-          <tr style={{ borderBottom: `1px solid ${'var(--gridline)'}` }}>
-            <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Symbol</th>
-            <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Readiness</th>
-            <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Close</th>
-            <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Resistance</th>
-            <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Distance</th>
-            <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>ATR Contraction</th>
-            <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Vol Ratio</th>
-            <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Confirms Above</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.symbol} style={{ borderTop: `1px solid ${'var(--gridline)'}` }}>
-              <td className="px-3 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{row.name ?? row.symbol}</span>
-                  {(row.universe === 'CUSTOM' || row.universe === 'NIFTY_500') && <UniverseTag universe={row.universe} />}
-                </div>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{row.symbol}</div>
-              </td>
-              <td className="px-3 py-2.5"><NearBreakoutBadge classification={row.classification} /></td>
-              <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>{fmtPrice(row.currentPrice)}</td>
-              <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--text-secondary)' }}>{fmtPrice(row.resistance)}</td>
-              <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--status-warning)' }}>{row.distanceToResistancePct.toFixed(2)}%</td>
-              <td className="tabular px-3 py-2.5 text-right" style={{ color: row.contracting ? 'var(--status-good)' : 'var(--text-secondary)' }}>
-                {row.atrContractionRatio.toFixed(2)}×
-              </td>
-              <td className="tabular px-3 py-2.5 text-right" style={{ color: row.volumeDriedUp ? 'var(--status-good)' : 'var(--text-secondary)' }}>
-                {row.volumeDryUpRatio.toFixed(2)}×
-              </td>
-              <td className="tabular px-3 py-2.5 text-right font-semibold" style={{ color: 'var(--status-good)' }}>
-                {fmtPrice(row.breakoutConfirmLevel)}
-              </td>
-            </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={8} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
-                No coiling setups right now — a stock needs to be trending, within 5% of its
-                60-day resistance, and not yet confirmed above it.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
     </div>
   )
 }
@@ -2161,7 +2071,7 @@ export default function App() {
             </p>
             <div className="mt-3">
               <ViewTabs view={view} setView={setView} reversalCount={data?.reversals?.length ?? 0}
-                nearBreakoutCount={data?.nearBreakouts?.length ?? 0} />
+                />
             </div>
           </header>
           <TradeJournalView />
@@ -2217,7 +2127,7 @@ export default function App() {
           </div>
 
           <div className="mt-5 border-t pt-5" style={{ borderColor: 'var(--gridline)' }}>
-            <ViewTabs view={view} setView={setView} reversalCount={0} nearBreakoutCount={0} />
+            <ViewTabs view={view} setView={setView} reversalCount={0} />
           </div>
         </div>
       </div>
@@ -2231,7 +2141,7 @@ export default function App() {
           <Logo size={34} />
         </div>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading scan results…</p>
-        <ViewTabs view={view} setView={setView} reversalCount={0} nearBreakoutCount={0} />
+        <ViewTabs view={view} setView={setView} reversalCount={0} />
       </div>
     )
   }
@@ -2252,7 +2162,7 @@ export default function App() {
             </p>
             <div className="mt-3">
               <ViewTabs view={view} setView={setView} reversalCount={data.reversals?.length ?? 0}
-                nearBreakoutCount={data.nearBreakouts?.length ?? 0} />
+                />
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5">
@@ -2285,11 +2195,6 @@ export default function App() {
         {view === 'reversal' && (
           <div className="mb-6 flex flex-wrap gap-3">
             <StatTile label="Confirmed signals" value={data.reversals?.length ?? 0} color="var(--status-good)" />
-          </div>
-        )}
-        {view === 'nearBreakout' && (
-          <div className="mb-6 flex flex-wrap gap-3">
-            <StatTile label="Coiling setups" value={data.nearBreakouts?.length ?? 0} color="var(--status-warning)" />
           </div>
         )}
 
@@ -2334,7 +2239,6 @@ export default function App() {
 
         {view === 'journal' && <TradeJournalView />}
         {view === 'reversal' && <ReversalTable rows={data.reversals ?? []} />}
-        {view === 'nearBreakout' && <NearBreakoutTable rows={data.nearBreakouts ?? []} />}
 
         {view === 'breakout' && (
         <>
