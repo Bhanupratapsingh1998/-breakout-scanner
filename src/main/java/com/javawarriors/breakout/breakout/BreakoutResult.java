@@ -34,6 +34,12 @@ public class BreakoutResult {
     public String classification = "REJECTED";    // BUY NOW / WAIT FOR PULLBACK / WAIT FOR BREAKOUT/RETEST / AVOID CHASING / REJECTED
     public String breakoutStatus = "NOT_CONFIRMED"; // CONFIRMED_HOLDING / CONFIRMED_RETESTING / FAILED / NOT_CONFIRMED
 
+    /** Structure of the breakout candle itself. Reported, but not yet gating anything. */
+    public BreakoutBarQuality barQuality = BreakoutBarQuality.unknown();
+
+    /** How far price has run from its own mean. A CHASE rating withholds BUY NOW. */
+    public StretchFromMean stretch = StretchFromMean.unknown();
+
     public BreakoutResult(String symbol) {
         this.symbol = symbol;
     }
@@ -148,6 +154,8 @@ public class BreakoutResult {
         row.put("exhaustionRisk", exhaustionRisk);
         row.put("classification", classification);
         row.put("breakoutStatus", breakoutStatus);
+        row.put("breakoutBarQuality", barQuality.toRow());
+        row.put("stretchFromMean", stretch.toRow());
         row.put("values", values);
 
         List<Map<String, Object>> checkRows = new ArrayList<>();

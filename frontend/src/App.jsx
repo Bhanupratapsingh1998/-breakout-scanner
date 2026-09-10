@@ -4,7 +4,6 @@ import {
   createChart, CandlestickSeries, HistogramSeries, createSeriesMarkers, LineStyle,
 } from 'lightweight-charts'
 
-const CUSTOM_STORAGE_KEY = 'breakout-scanner:custom-symbols'
 
 function Logo({ size = 22 }) {
   return (
@@ -644,16 +643,39 @@ function DetailPanel({ row }) {
   )
 }
 
-function loadSavedSymbols() {
+/**
+ * The watchlist lives in the database, not localStorage: it should follow the user across
+ * browsers and survive a cache clear, and the server needs to be able to see it. A failed read
+ * returns an empty list rather than throwing — an unreachable API should not blank the page.
+ */
+async function loadSavedSymbols() {
   try {
-    return JSON.parse(localStorage.getItem(CUSTOM_STORAGE_KEY) ?? '[]')
+    const res = await fetch('/api/watchlist')
+    if (!res.ok) return []
+    return (await res.json()).map((r) => r.symbol)
   } catch {
     return []
   }
 }
 
-function saveSymbols(symbols) {
-  localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(symbols))
+async function saveSymbol(symbol) {
+  try {
+    await fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol }),
+    })
+  } catch {
+    // Non-fatal: the lookup still shows this session. It just will not survive a reload.
+  }
+}
+
+async function forgetSymbol(symbol) {
+  try {
+    await fetch(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' })
+  } catch {
+    // Non-fatal, as above.
+  }
 }
 
 const inputStyle = {
@@ -681,7 +703,7 @@ function FilterPill({ active, onClick, children }) {
 /** The Breakout Scanner / Near Breakout / Reversal Watch / Trade Journal tab row — shared by the
  *  main app shell AND the "no scan data yet" / "loading" screens, so every tab is reachable from
  *  anywhere, not just after a scan has completed. */
-function ViewTabs({ view, setView, reversalCount }) {
+function ViewTabs({ view, setView, reversalCount, watchlistCount = 0 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       <FilterPill active={view === 'breakout'} onClick={() => setView('breakout')}>
@@ -690,9 +712,87 @@ function ViewTabs({ view, setView, reversalCount }) {
       <FilterPill active={view === 'reversal'} onClick={() => setView('reversal')}>
         Reversal Watch{reversalCount > 0 ? ` (${reversalCount})` : ''}
       </FilterPill>
+      <FilterPill active={view === 'lookup'} onClick={() => setView('lookup')}>
+        My Watchlist{watchlistCount > 0 ? ` (${watchlistCount})` : ''}
+      </FilterPill>
       <FilterPill active={view === 'journal'} onClick={() => setView('journal')}>
         Trade Journal
       </FilterPill>
+    </div>
+  )
+}
+
+/**
+ * The user's own followed symbols. Same expandable row as the scanner table so the detail panel,
+ * chart and trade plan all work identically — the only differences are that every row is
+ * removable and the list is the watchlist rather than the scanned universe.
+ */
+function WatchlistTable({ rows, expanded, setExpanded, onRemove }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      <table className="w-full text-sm">
+        <thead>
+          <tr style={{ borderBottom: `1px solid ${'var(--gridline)'}` }}>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Symbol</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>A–J</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Setup / Entry</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Decision</th>
+            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Close</th>
+            <th className="px-4 py-3" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <Fragment key={row.symbol}>
+              <tr
+                onClick={() => setExpanded(expanded === row.symbol ? null : row.symbol)}
+                className="cursor-pointer transition-colors"
+                style={{ borderTop: `1px solid ${'var(--gridline)'}` }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <td className="px-4 py-2.5">
+                  <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{row.name ?? row.symbol}</div>
+                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{row.symbol}</div>
+                </td>
+                <td className="px-4 py-2.5"><CheckDots checks={row.checks} /></td>
+                <td className="tabular px-4 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  S {row.setupScore}/{row.setupTotal} &middot; E {row.entryScore}/{row.entryTotal}
+                </td>
+                <td className="px-4 py-2.5"><DecisionBadge classification={row.classification} /></td>
+                <td className="tabular px-4 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>
+                  {row.values?.Close?.toFixed(2)}
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRemove(row.symbol) }}
+                    className="transition-opacity hover:opacity-70"
+                    style={{ color: 'var(--text-muted)' }}
+                    title="Stop following this stock"
+                  >
+                    &#10005;
+                  </button>
+                </td>
+              </tr>
+              {expanded === row.symbol && (
+                <tr>
+                  <td colSpan={6} className="p-0">
+                    <DetailPanel row={row} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={6} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                Nothing followed yet. Search for any NSE or BSE symbol above — it is saved to your
+                account, so it will still be here on another browser or after clearing your cache.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -837,7 +937,7 @@ function pnlColor(v) {
 }
 
 /** Backend sends "Infinity" (a string) for ratios with a zero denominator — e.g. a month with
- *  wins but no losses yet. Never call .toFixed() on that directly; format through here instead. */
+ *  profits but no losses yet. Never call .toFixed() on that directly; format through here. */
 function fmtRatio(v) {
   if (v == null) return '—'
   if (v === 'Infinity' || v === Infinity) return '∞'
@@ -855,10 +955,12 @@ function StatusBadge({ status }) {
   )
 }
 
+// Keys are the backend's result() values (WIN / LOSS / OPEN); the labels are what the journal
+// actually calls them.
 const RESULT_META = {
   WIN: { color: 'var(--status-good)', label: 'Profit' },
-  LOSS: { color: 'var(--status-critical)', label: 'LOSS' },
-  OPEN: { color: 'var(--status-warning)', label: 'OPEN' },
+  LOSS: { color: 'var(--status-critical)', label: 'Loss' },
+  OPEN: { color: 'var(--status-warning)', label: 'Open' },
 }
 
 function ResultBadge({ result }) {
@@ -1411,10 +1513,10 @@ function FullChartModal({ row, onClose }) {
 }
 
 
-/** Win/loss split as a single proportion bar — two status colors, direct labels, no legend box
- *  needed (each segment carries its own label + dot, so identity is never color-alone). */
-function WinLossBar({ wins, losses }) {
-  const total = wins + losses
+/** Profit/loss split as a single proportion bar — two status colors, direct labels, no legend
+ *  box needed (each segment carries its own label + dot, so identity is never color-alone). */
+function ProfitLossBar({ profits, losses }) {
+  const total = profits + losses
   if (total === 0) {
     return (
       <div className="flex items-center justify-center text-sm" style={{ height: 180, color: 'var(--text-muted)' }}>
@@ -1422,22 +1524,22 @@ function WinLossBar({ wins, losses }) {
       </div>
     )
   }
-  const winPct = (wins / total) * 100
+  const profitPct = (profits / total) * 100
   const lossPct = (losses / total) * 100
   return (
     <div className="flex flex-col justify-center" style={{ minHeight: 180 }}>
-      <div className="tabular text-center text-3xl font-bold" style={{ color: winPct >= 50 ? 'var(--status-good)' : 'var(--status-critical)' }}>
-        {winPct.toFixed(0)}%
+      <div className="tabular text-center text-3xl font-bold" style={{ color: profitPct >= 50 ? 'var(--status-good)' : 'var(--status-critical)' }}>
+        {profitPct.toFixed(0)}%
       </div>
-      <div className="mb-4 text-center text-xs" style={{ color: 'var(--text-muted)' }}>win rate</div>
+      <div className="mb-4 text-center text-xs" style={{ color: 'var(--text-muted)' }}>profit rate</div>
       <div className="flex h-3 overflow-hidden rounded-full" style={{ background: 'var(--gridline)' }}>
-        {wins > 0 && <div style={{ width: `${winPct}%`, background: 'var(--status-good)' }} />}
-        {wins > 0 && losses > 0 && <div style={{ width: 2, background: 'var(--surface-1)' }} />}
+        {profits > 0 && <div style={{ width: `${profitPct}%`, background: 'var(--status-good)' }} />}
+        {profits > 0 && losses > 0 && <div style={{ width: 2, background: 'var(--surface-1)' }} />}
         {losses > 0 && <div style={{ width: `${lossPct}%`, background: 'var(--status-critical)' }} />}
       </div>
       <div className="mt-2.5 flex items-center justify-between text-xs">
         <span className="flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
-          <Dot color="var(--status-good)" size={7} /> {wins} win{wins !== 1 ? 's' : ''}
+          <Dot color="var(--status-good)" size={7} /> {profits} profit{profits !== 1 ? 's' : ''}
         </span>
         <span className="flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
           {losses} loss{losses !== 1 ? 'es' : ''} <Dot color="var(--status-critical)" size={7} />
@@ -1459,9 +1561,9 @@ function JournalCharts({ rows, dashboard }) {
       </div>
       <div className="flex-1 rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
         <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-          Win / Loss Split
+          Profit / Loss Split
         </h4>
-        <WinLossBar wins={dashboard.tradeCount.wins} losses={dashboard.tradeCount.losses} />
+        <ProfitLossBar profits={dashboard.tradeCount.wins} losses={dashboard.tradeCount.losses} />
       </div>
     </div>
   )
@@ -1608,11 +1710,11 @@ function JournalDashboard({ d }) {
       />
       <DashboardCard
         title="Performance Quality" icon="🎯"
-        headline={{ label: 'Win rate', value: fmtPct(pq.winRatePct) }}
+        headline={{ label: 'Profit rate', value: fmtPct(pq.winRatePct) }}
         rows={[
-          ['Avg win', fmtMoney(pq.avgWin), 'var(--status-good)'],
+          ['Avg profit', fmtMoney(pq.avgWin), 'var(--status-good)'],
           ['Avg loss', fmtMoney(pq.avgLoss), 'var(--status-critical)'],
-          ['Largest win', fmtMoney(pq.largestWin), 'var(--status-good)'],
+          ['Largest profit', fmtMoney(pq.largestWin), 'var(--status-good)'],
           ['Largest loss', fmtMoney(pq.largestLoss), 'var(--status-critical)'],
         ]}
       />
@@ -1622,7 +1724,7 @@ function JournalDashboard({ d }) {
         rows={[
           ['Closed', tc.closed],
           ['Open', tc.open],
-          ['Wins', tc.wins, 'var(--status-good)'],
+          ['Profits', tc.wins, 'var(--status-good)'],
           ['Losses', tc.losses, 'var(--status-critical)'],
         ]}
       />
@@ -1631,7 +1733,7 @@ function JournalDashboard({ d }) {
         headline={{ label: 'Expectancy / trade', value: fmtMoney(em.expectancyPerTrade), color: pnlColor(em.expectancyPerTrade) }}
         rows={[
           ['Profit factor', fmtRatio(em.profitFactor)],
-          ['Win : Loss ratio', fmtRatio(em.winLossRatio)],
+          ['Profit : Loss ratio', fmtRatio(em.winLossRatio)],
           ['Avg hold (closed days)', em.avgHoldClosedDays.toFixed(1)],
           ['Risk on open capital', fmtPct(em.riskOnOpenCapitalPct)],
         ]}
@@ -1978,8 +2080,8 @@ export default function App() {
             setRefreshError(s.lastResult.error)
           } else {
             await loadResults()
-            const saved = loadSavedSymbols()
-            saved.forEach((sym) => fetchCustom(sym, { silent: true }))
+            loadSavedSymbols().then((saved) =>
+              saved.forEach((sym) => fetchCustom(sym, { silent: true })))
           }
           setRefreshing(false)
           setRefreshProgress(null)
@@ -1998,8 +2100,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    const saved = loadSavedSymbols()
-    saved.forEach((sym) => fetchCustom(sym, { silent: true }))
+    loadSavedSymbols().then((saved) => saved.forEach((sym) => fetchCustom(sym, { silent: true })))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -2013,8 +2114,8 @@ export default function App() {
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       setCustomRows((prev) => [body, ...prev.filter((r) => r.symbol !== body.symbol)])
-      const saved = loadSavedSymbols()
-      if (!saved.includes(body.symbol)) saveSymbols([...saved, body.symbol])
+      // The server de-duplicates, so an already-followed symbol is a harmless no-op.
+      saveSymbol(body.symbol)
     } catch (e) {
       if (!silent) setCustomError(e.message || 'Could not reach the API server')
     } finally {
@@ -2024,7 +2125,7 @@ export default function App() {
 
   function removeCustom(symbol) {
     setCustomRows((prev) => prev.filter((r) => r.symbol !== symbol))
-    saveSymbols(loadSavedSymbols().filter((s) => s !== symbol))
+    forgetSymbol(symbol)
   }
 
   const allRows = useMemo(() => {
@@ -2071,7 +2172,7 @@ export default function App() {
             </p>
             <div className="mt-3">
               <ViewTabs view={view} setView={setView} reversalCount={data?.reversals?.length ?? 0}
-                />
+                watchlistCount={customRows.length} />
             </div>
           </header>
           <TradeJournalView />
@@ -2162,7 +2263,7 @@ export default function App() {
             </p>
             <div className="mt-3">
               <ViewTabs view={view} setView={setView} reversalCount={data.reversals?.length ?? 0}
-                />
+                watchlistCount={customRows.length} />
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5">
@@ -2197,8 +2298,17 @@ export default function App() {
             <StatTile label="Confirmed signals" value={data.reversals?.length ?? 0} color="var(--status-good)" />
           </div>
         )}
+        {view === 'lookup' && (
+          <div className="mb-6 flex flex-wrap gap-3">
+            <StatTile label="Followed" value={customRows.length} />
+            <StatTile label="Buy now" color="var(--status-good)"
+              value={customRows.filter((r) => decisionOf(r.classification) === 'BUY NOW').length} />
+            <StatTile label="Wait" color="var(--status-warning)"
+              value={customRows.filter((r) => decisionOf(r.classification) === 'WAIT').length} />
+          </div>
+        )}
 
-        {view !== 'journal' && (
+        {view === 'lookup' && (
         <div className="mb-6 rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
           <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
             Look up any other stock
@@ -2239,6 +2349,10 @@ export default function App() {
 
         {view === 'journal' && <TradeJournalView />}
         {view === 'reversal' && <ReversalTable rows={data.reversals ?? []} />}
+        {view === 'lookup' && (
+          <WatchlistTable rows={customRows} expanded={expanded} setExpanded={setExpanded}
+            onRemove={removeCustom} />
+        )}
 
         {view === 'breakout' && (
         <>
