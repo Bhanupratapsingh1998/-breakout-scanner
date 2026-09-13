@@ -1,7 +1,6 @@
 package com.javawarriors.breakout.tradesetup;
 
 import com.javawarriors.breakout.breakout.BreakoutAnalyzer;
-import com.javawarriors.breakout.breakout.BreakoutResult;
 import com.javawarriors.breakout.candlestick.CandlestickPattern;
 import com.javawarriors.breakout.candlestick.CandlestickPatternAnalyzer;
 import com.javawarriors.breakout.candlestick.SupportLevelDetector;
@@ -10,13 +9,13 @@ import com.javawarriors.breakout.model.Bar;
 import java.util.List;
 
 /**
- * Layers candlestick pattern detection, confirmation, volume, and support-level scoring on top
- * of the existing scanners — WITHOUT modifying BreakoutAnalyzer or ReversalAnalyzer, and without
- * fetching any data beyond the bars already pulled for a scan. Produces a single
- * {@link TradeSetupResult} shape for either setup type, so "is this stock worth trading" (the
- * existing hard gates) and "how good does the candlestick confirmation look" (the new 0-10
- * score) stay clearly separate, matching the Setup/Entry-quality split already used elsewhere in
- * this scanner.
+ * Scores a reversal setup: candlestick pattern detection, confirmation, volume and support-level
+ * quality, layered on bars that were already fetched for a scan rather than re-requested.
+ *
+ * <p>It once scored breakout setups too, by reading the Breakout Scanner's hard gates. That
+ * scanner has been removed, so only the reversal path remains - which never depended on it: a
+ * reversal is entered on a bearish context plus a confirmed reversal pattern, deliberately NOT on
+ * a resistance breakout, which would wrongly reject a stock still forming its base.
  *
  * DESIGN NOTE — no fabricated win rates: nothing here claims "Hammer has a 60% win rate" or
  * similar. Those numbers vary wildly by market, timeframe, and exact rule set, and quoting one
@@ -35,42 +34,6 @@ public class TradeSetupAnalyzer {
     private static final int BEARISH_LOOKBACK = 252; // ~52 trading weeks
     private static final double BEARISH_RETURN_THRESHOLD = -0.15;
     private static final double ATR_STOP_BUFFER = 0.25;
-
-    /** BREAKOUT_SETUP: hard gates come straight from the existing BreakoutAnalyzer checklist —
-     *  trend/breakout/volume/R:R logic is not re-implemented or second-guessed here. */
-    public TradeSetupResult scoreBreakoutSetup(String symbol, List<Bar> bars, List<Bar> benchmarkBars,
-                                                String benchmarkName) {
-        BreakoutResult br = new BreakoutAnalyzer().analyze(symbol, bars, benchmarkBars, benchmarkName);
-        TradeSetupResult r = new TradeSetupResult(symbol);
-        r.setupType = "BREAKOUT_SETUP";
-
-        boolean trend = Boolean.TRUE.equals(br.checks.get("A. Price > 20 EMA"))
-                && Boolean.TRUE.equals(br.checks.get("B. 20 EMA > 50 EMA"))
-                && Boolean.TRUE.equals(br.checks.get("C. 50 EMA > 200 EMA"));
-        boolean breakoutConfirmed = Boolean.TRUE.equals(br.checks.get("D. Confirmed close > resistance +0.5%"));
-        boolean volumeGate = Boolean.TRUE.equals(br.checks.get("E. Volume > 1.5x avg"));
-        boolean rrGate = Boolean.TRUE.equals(br.checks.get("I. Risk/reward >= 1:2"));
-
-        r.hardGates.put("trend", trend);
-        r.hardGates.put("breakoutOrConfirmation", breakoutConfirmed);
-        r.hardGates.put("volume", volumeGate);
-        r.hardGates.put("riskReward", rrGate);
-
-        r.entry = br.values.getOrDefault("Close", 0.0);
-        r.stop = br.values.get("Stop Loss");
-        r.target = br.values.get("Target");
-        r.riskPerShare = br.values.get("Risk");
-        r.rewardPerShare = br.values.get("Reward");
-        r.riskReward = br.values.get("Risk:Reward");
-
-        applyCandlestickLayer(r, bars, bars.size(), br.values.get("EMA50"), br.values.get("EMA200"));
-
-        boolean allGatesPass = trend && breakoutConfirmed && volumeGate && rrGate;
-        r.classification = !allGatesPass
-                ? "REJECTED"
-                : classifyByScore(r.candlestickScore, "WATCH", "GOOD_SETUP", "HIGH_QUALITY_SETUP");
-        return r;
-    }
 
     /**
      * REVERSAL_SETUP: bearish context + reversal pattern + confirmation are the entry criteria

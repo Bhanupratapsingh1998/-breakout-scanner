@@ -1,30 +1,22 @@
 package com.javawarriors.breakout.scan;
 
-import com.javawarriors.breakout.breakout.BreakoutAnalyzer;
-import com.javawarriors.breakout.breakout.BreakoutResult;
-import com.javawarriors.breakout.marketdata.BenchmarkSource;
-import com.javawarriors.breakout.marketdata.NiftyUniverse;
-import com.javawarriors.breakout.marketdata.NseIndexSource;
-import com.javawarriors.breakout.marketdata.YahooDataSource;
-import com.javawarriors.breakout.model.Bar;
-import com.javawarriors.breakout.tradesetup.TradeSetupAnalyzer;
-import com.javawarriors.breakout.tradesetup.TradeSetupResult;
-
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Holds scan state (running/progress/last results) and the single-symbol lookup used by the dashboard. */
+/**
+ * Holds the reversal scan's state: running/progress/last results.
+ *
+ * <p>Previously this also served a single-symbol breakout lookup for the watchlist. That analysis
+ * went with the Breakout Scanner; single-symbol lookups are now served by
+ * {@code GET /api/bullish-stocks/{symbol}}, which returns a far more complete assessment of the
+ * same stock.
+ */
 @Service
 public class ScanService {
-
-    private final BreakoutAnalyzer analyzer = new BreakoutAnalyzer();
-    private final TradeSetupAnalyzer tradeSetupAnalyzer = new TradeSetupAnalyzer();
-    private final YahooDataSource source = new YahooDataSource();
 
     private final AtomicBoolean scanRunning = new AtomicBoolean(false);
     private final AtomicReference<String> scanProgress = new AtomicReference<>(null);
@@ -39,12 +31,13 @@ public class ScanService {
         Thread worker = new Thread(() -> {
             try {
                 ScanRunner.ScanOutcome outcome = ScanRunner.runFullScan(scanProgress::set);
-                Map<String, Object> payload = ScanRunner.buildPayload(outcome.results(), outcome.reversals(),
+                Map<String, Object> payload = ScanRunner.buildPayload(outcome.reversals(),
                         outcome.universeSize(), outcome.nifty500Names());
                 lastResults.set(payload);
 
                 Map<String, Object> summary = new LinkedHashMap<>();
-                summary.put("scanned", outcome.results().size());
+                summary.put("scanned", outcome.universeSize() - outcome.failed());
+                summary.put("reversals", outcome.reversals().size());
                 summary.put("failed", outcome.failed());
                 summary.put("universeSize", outcome.universeSize());
                 summary.put("generatedAt", payload.get("generatedAt"));
@@ -72,55 +65,5 @@ public class ScanService {
     /** Last completed scan payload, or null if no scan has finished yet. */
     public Map<String, Object> results() {
         return lastResults.get();
-    }
-
-    /** Live single-symbol lookup for the dashboard's "custom stock" search. */
-    public Map<String, Object> analyze(String rawSymbol) throws Exception {
-        String symbol = rawSymbol.trim().toUpperCase();
-        if (!symbol.contains(".")) symbol += ".NS"; // default to NSE if no exchange suffix given
-
-        List<Bar> bars = source.fetchDaily(symbol, "18mo");
-        if (bars.size() < 200) {
-            throw new IllegalArgumentException(symbol + ": need >= 200 bars of history, got " + bars.size());
-        }
-
-        String universe = universeOf(symbol);
-        // stocks outside all three benchmarked tiers still get compared against the broad
-        // Nifty 500 as a general market yardstick, rather than skipping the check entirely
-        String benchmarkUniverse = "CUSTOM".equals(universe) ? "NIFTY_500" : universe;
-        List<Bar> benchmarkBars = BenchmarkSource.barsFor(benchmarkUniverse);
-        if (benchmarkBars == null) {
-            BenchmarkSource.refreshAll();
-            benchmarkBars = BenchmarkSource.barsFor(benchmarkUniverse);
-        }
-
-        BreakoutResult r = analyzer.analyze(symbol, bars, benchmarkBars, BenchmarkSource.displayName(benchmarkUniverse));
-        Map<String, Object> row = toRow(r, universe);
-        String name = row.get("name").toString();
-
-        // Candlestick confirmation layer for both setup types — reuses the same fetched bars.
-        TradeSetupResult breakoutSetup = tradeSetupAnalyzer.scoreBreakoutSetup(
-                symbol, bars, benchmarkBars, BenchmarkSource.displayName(benchmarkUniverse));
-        row.put("breakoutSetup", breakoutSetup.toRow(name, universe));
-
-        TradeSetupResult reversalSetup = tradeSetupAnalyzer.scoreReversalSetup(symbol, bars);
-        if (!"REJECTED".equals(reversalSetup.classification)) {
-            row.put("reversalSetup", reversalSetup.toRow(name, universe));
-        }
-
-        return row;
-    }
-
-    private String universeOf(String symbol) {
-        if (NiftyUniverse.NIFTY_50.contains(symbol)) return "NIFTY_50";
-        if (NiftyUniverse.NIFTY_NEXT_50.contains(symbol)) return "NEXT_50";
-        return NseIndexSource.cached().containsKey(symbol) ? "NIFTY_500" : "CUSTOM";
-    }
-
-    private Map<String, Object> toRow(BreakoutResult r, String universe) {
-        String fallbackName = r.symbol.replaceAll("\\.(NS|BO)$", "");
-        Map<String, String> nifty500 = NseIndexSource.cached();
-        String name = nifty500.getOrDefault(r.symbol, NiftyUniverse.NAMES.getOrDefault(r.symbol, fallbackName));
-        return r.toRow(name, universe);
     }
 }

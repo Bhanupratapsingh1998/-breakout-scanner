@@ -16,15 +16,6 @@ function Logo({ size = 22 }) {
   )
 }
 
-function ExpandIcon({ size = 13 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M15 3h6v6M21 3l-7 7M9 21H3v-6M3 21l7-7" />
-    </svg>
-  )
-}
-
 function LogoBadge({ size = 36 }) {
   return (
     <div
@@ -32,17 +23,6 @@ function LogoBadge({ size = 36 }) {
       style={{ width: size, height: size, background: 'var(--logo-bg)', color: 'var(--accent)' }}
     >
       <Logo size={size * 0.52} />
-    </div>
-  )
-}
-
-function MiniStat({ label, value }) {
-  return (
-    <div>
-      <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-        {label}
-      </div>
-      <div className="mt-0.5 text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{value}</div>
     </div>
   )
 }
@@ -60,13 +40,6 @@ const DECISION_META = {
   REJECT: { color: 'var(--status-critical)', label: 'REJECT' },
 }
 
-const DECISIONS = ['ALL', 'BUY NOW', 'WAIT', 'REJECT']
-
-/**
- * Any analyzer classification, breakout or reversal, mapped onto the shared three. Every value
- * the backend emits is listed explicitly so the default branch stays a drift detector rather
- * than a catch-all that silently rejects a classification nobody remembered to map.
- */
 function decisionOf(classification) {
   switch (classification) {
     case 'BUY NOW':
@@ -116,44 +89,6 @@ function DecisionBadge({ classification }) {
   )
 }
 
-const EXHAUSTION_META = {
-  LOW: { color: 'var(--status-good)', label: 'LOW' },
-  MEDIUM: { color: 'var(--status-warning)', label: 'MEDIUM' },
-  HIGH: { color: 'var(--status-critical)', label: 'HIGH' },
-}
-
-const BREAKOUT_STATUS_META = {
-  CONFIRMED_HOLDING: { color: 'var(--status-good)', label: 'CONFIRMED & HOLDING' },
-  CONFIRMED_RETESTING: { color: 'var(--status-warning)', label: 'CONFIRMED — RETESTING' },
-  FAILED: { color: 'var(--status-critical)', label: 'FAILED' },
-  NOT_CONFIRMED: { color: 'var(--status-critical)', label: 'NOT CONFIRMED' },
-}
-
-function BreakoutStatusBadge({ status }) {
-  const meta = BREAKOUT_STATUS_META[status] ?? BREAKOUT_STATUS_META.NOT_CONFIRMED
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
-      <Dot color={meta.color} size={7} />
-      <span>{meta.label}</span>
-    </span>
-  )
-}
-
-function CheckDots({ checks }) {
-  return (
-    <div className="flex gap-1">
-      {checks.map((c) => (
-        <span
-          key={c.label}
-          title={`${c.pass ? 'PASS' : 'FAIL'} — ${c.label}`}
-          className="h-2.5 w-2.5 rounded-[2px]"
-          style={{ background: c.pass ? 'var(--status-good)' : 'var(--gridline)' }}
-        />
-      ))}
-    </div>
-  )
-}
-
 function UniverseTag({ universe }) {
   const meta = UNIVERSES.find((u) => u.key === universe)
   if (!meta || meta.key === 'ALL') return null
@@ -176,10 +111,6 @@ function fmtVolume(v) {
   return Math.round(v).toLocaleString('en-IN')
 }
 
-function fmtValue(key, v) {
-  return key.toLowerCase().includes('volume') ? fmtVolume(v) : fmtPrice(v)
-}
-
 function StatTile({ label, value, color }) {
   return (
     <div
@@ -193,452 +124,6 @@ function StatTile({ label, value, color }) {
       <div className="tabular text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>
         {value}
       </div>
-    </div>
-  )
-}
-
-function PriceHeader({ values }) {
-  const close = values.Close
-  const prevClose = values['Prev Close']
-  const delta = prevClose != null ? close - prevClose : null
-  const pct = delta != null && prevClose ? (delta / prevClose) * 100 : null
-  const up = delta != null && delta >= 0
-  const deltaColor = up ? 'var(--status-good)' : 'var(--status-critical)'
-  return (
-    <div className="flex items-baseline gap-3">
-      <span className="tabular text-3xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-        &#8377;{fmtPrice(close)}
-      </span>
-      {delta != null && (
-        <span className="tabular inline-flex items-center gap-1 text-sm font-semibold" style={{ color: deltaColor }}>
-          {up ? '▲' : '▼'} {fmtPrice(Math.abs(delta))} ({up ? '+' : ''}
-          {pct.toFixed(2)}%)
-        </span>
-      )}
-    </div>
-  )
-}
-
-function OhlcStrip({ values }) {
-  const cells = [
-    ['Open', values.Open],
-    ['High', values.High],
-    ['Low', values.Low],
-    ['Prev Close', values['Prev Close']],
-  ].filter(([, v]) => v != null)
-
-  return (
-    <div className="flex overflow-hidden rounded-lg border" style={{ borderColor: 'var(--border)' }}>
-      {cells.map(([label, v], i) => (
-        <div
-          key={label}
-          className="flex-1 px-3 py-2 text-center"
-          style={{ borderLeft: i > 0 ? `1px solid ${'var(--border)'}` : 'none' }}
-        >
-          <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-            {label}
-          </div>
-          <div className="tabular mt-0.5 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-            {fmtPrice(v)}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function TrendLadder({ values }) {
-  const steps = [
-    ['Price', values.Close],
-    ['EMA20', values.EMA20],
-    ['EMA50', values.EMA50],
-    ['EMA200', values.EMA200],
-  ]
-  return (
-    <div>
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-        Trend (Price &gt; EMA20 &gt; EMA50 &gt; EMA200)
-      </h4>
-      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
-        {steps.map(([label, v], i) => {
-          const prevVal = i > 0 ? steps[i - 1][1] : null
-          const ok = prevVal == null || prevVal > v
-          return (
-            <Fragment key={label}>
-              {i > 0 && (
-                <span className="text-sm font-bold" style={{ color: ok ? 'var(--status-good)' : 'var(--status-critical)' }}>
-                  &rarr;
-                </span>
-              )}
-              <div className="flex flex-col items-center rounded px-2 py-1">
-                <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-                  {label}
-                </span>
-                <span className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {fmtPrice(v)}
-                </span>
-              </div>
-            </Fragment>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function Meter({ label, statusLabel, statusColor, primary, secondary, fillPct }) {
-  return (
-    <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
-      <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-        <span>{label}</span>
-        <span style={{ color: statusColor }}>{statusLabel}</span>
-      </div>
-      <div className="mt-1.5 flex items-baseline justify-between">
-        <span className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{primary}</span>
-        <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{secondary}</span>
-      </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--gridline)' }}>
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${Math.min(100, Math.max(4, fillPct))}%`, background: statusColor }}
-        />
-      </div>
-    </div>
-  )
-}
-
-function ResistanceMeter({ values }) {
-  const price = values.Close
-  const resistance = values['Prev resistance']
-  const confirmLevel = values['Breakout Confirm Level'] ?? resistance
-  const confirmed = price > confirmLevel
-  const pct = resistance ? ((price - resistance) / resistance) * 100 : 0
-  const color = confirmed ? 'var(--status-good)' : 'var(--status-critical)'
-  return (
-    <Meter
-      label="Resistance"
-      statusLabel={confirmed ? 'CONFIRMED ✓' : 'NOT CONFIRMED'}
-      statusColor={color}
-      primary={`₹${fmtPrice(resistance)}`}
-      secondary={`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% vs price (need +0.5%)`}
-      fillPct={50 + pct * 4}
-    />
-  )
-}
-
-function VolumeMeter({ values }) {
-  const vol = values.Volume
-  const avg = values['Volume MA(20)']
-  const ratio = avg ? vol / avg : 1
-  const above = ratio >= 1
-  const color = above ? 'var(--status-good)' : 'var(--status-muted)'
-  return (
-    <Meter
-      label="Volume vs 20d avg"
-      statusLabel={`${ratio.toFixed(2)}×`}
-      statusColor={color}
-      primary={fmtVolume(vol)}
-      secondary={`avg ${fmtVolume(avg)}`}
-      fillPct={ratio * 50}
-    />
-  )
-}
-
-function RsiMeter({ values }) {
-  const rsi = values['RSI(14)']
-  if (rsi == null) return null
-  const overbought = rsi >= 70
-  const oversold = rsi <= 30
-  const color = overbought ? 'var(--status-critical)' : oversold ? 'var(--status-warning)' : 'var(--status-good)'
-  const statusLabel = overbought ? 'OVERBOUGHT' : oversold ? 'OVERSOLD' : 'HEALTHY'
-  return (
-    <Meter
-      label="RSI (14)"
-      statusLabel={statusLabel}
-      statusColor={color}
-      primary={rsi.toFixed(1)}
-      secondary={overbought ? '≥ 70' : oversold ? '≤ 30' : '30–70'}
-      fillPct={rsi}
-    />
-  )
-}
-
-function TradeRow({ label, value, color }) {
-  return (
-    <div className="flex items-baseline justify-between py-1">
-      <dt className="text-sm" style={{ color: 'var(--text-secondary)' }}>{label}</dt>
-      <dd className="tabular text-sm font-semibold" style={{ color: color ?? 'var(--text-primary)' }}>
-        ₹{fmtPrice(value)}
-      </dd>
-    </div>
-  )
-}
-
-function TradePlan({ values }) {
-  const entry = values.Close
-  const stop = values['Stop Loss']
-  const risk = values.Risk
-  const target = values.Target
-  const reward = values.Reward
-  const rr = values['Risk:Reward']
-
-  return (
-    <div>
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-        Trade Plan
-      </h4>
-      {risk == null || risk <= 0 ? (
-        <div className="rounded-lg border p-4 text-sm" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-          Not broken out yet — price is still below ₹{fmtPrice(values['Prev resistance'])}, the resistance it needs to clear first. No valid trade plan until it does.
-        </div>
-      ) : (
-        <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
-          <dl>
-            <TradeRow label="Entry" value={entry} />
-            <TradeRow label="Stop-loss" value={stop} color="var(--status-critical)" />
-            <TradeRow label="Risk" value={risk} color="var(--status-critical)" />
-          </dl>
-          <div className="my-2 border-t" style={{ borderColor: 'var(--gridline)' }} />
-          <dl>
-            <TradeRow label="Target" value={target} color="var(--status-good)" />
-            <TradeRow label="Reward" value={reward} color="var(--status-good)" />
-          </dl>
-          {rr != null && (
-            <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs" style={{ borderColor: 'var(--gridline)' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Risk : Reward</span>
-              <span
-                className="tabular font-semibold"
-                style={{ color: rr >= 2 ? 'var(--status-good)' : 'var(--status-critical)' }}
-              >
-                {rr.toFixed(2)} : 1
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ScoreTile({ label, score, max }) {
-  const pct = max ? (score / max) * 100 : 0
-  const color = pct >= 80 ? 'var(--status-good)' : pct >= 40 ? 'var(--status-warning)' : 'var(--status-critical)'
-  return (
-    <div className="flex flex-1 flex-col gap-1.5 rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-      <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>{label}</div>
-      <div className="tabular text-2xl font-semibold" style={{ color }}>{score}/{max}</div>
-    </div>
-  )
-}
-
-/**
- * Setup Quality alone answers "is this stock worth trading" — it's what the old single
- * checklist measured. Entry Quality answers "is NOW the right time," and is what was missing
- * when a 10/10 setup got bought right into a profit-booking selloff. A stock can be
- * Setup 10/10 + Entry 2/10 — that combination should read as WAIT, not BUY.
- */
-function EntryQualityPanel({ row }) {
-  const { values } = row
-  const exhaustionMeta = EXHAUSTION_META[row.exhaustionRisk] ?? EXHAUSTION_META.LOW
-  const aggressive = values['Aggressive Entry']
-  const conservative = values['Conservative Entry']
-  const preferred = values['Preferred Entry']
-
-  return (
-    <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-          Setup vs. Entry
-        </h4>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <BreakoutStatusBadge status={row.breakoutStatus} />
-          <DecisionBadge classification={row.classification} />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <ScoreTile label="Setup Quality" score={row.setupScore} max={row.setupTotal} />
-        <ScoreTile label="Entry Quality" score={row.entryScore} max={row.entryTotal} />
-        <div className="flex flex-1 flex-col gap-1.5 rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-          <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>Profit-Booking Risk</div>
-          <div className="tabular text-2xl font-semibold" style={{ color: exhaustionMeta.color }}>{exhaustionMeta.label}</div>
-        </div>
-      </div>
-      {aggressive != null && (
-        <div className="mt-3 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
-          <dl>
-            <TradeRow label="Aggressive entry (now)" value={aggressive} />
-            <TradeRow label="Conservative entry (retest/HL)" value={conservative} color="var(--cat-next50)" />
-            <TradeRow label="Preferred entry" value={preferred} color="var(--accent)" />
-          </dl>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function checkDetail(label, values) {
-  if (label.startsWith('A.')) return `${fmtPrice(values.Close)} vs ${fmtPrice(values.EMA20)}`
-  if (label.startsWith('B.')) return `${fmtPrice(values.EMA20)} vs ${fmtPrice(values.EMA50)}`
-  if (label.startsWith('C.')) return `${fmtPrice(values.EMA50)} vs ${fmtPrice(values.EMA200)}`
-  if (label.startsWith('D.')) return `${fmtPrice(values.Close)} vs ${fmtPrice(values['Breakout Confirm Level'])} (resistance ${fmtPrice(values['Prev resistance'])} +0.5%)`
-  if (label.startsWith('E.')) return `${fmtVolume(values.Volume)} vs ${fmtVolume(1.5 * values['Volume MA(20)'])} (1.5× avg)`
-  if (label.startsWith('F.')) return `RSI ${values['RSI(14)']?.toFixed(1)} (need 55–70)`
-  if (label.startsWith('G.')) return `ADX ${values['ADX(14)']?.toFixed(1)} vs 25`
-  if (label.startsWith('H.')) {
-    const stock = values['Stock Return (20d) %']
-    const bench = values['Benchmark Return (20d) %']
-    if (stock == null || bench == null) return 'no benchmark data'
-    return `${stock.toFixed(2)}% vs ${bench.toFixed(2)}%`
-  }
-  if (label.startsWith('I.')) {
-    const rr = values['Risk:Reward']
-    return rr == null ? 'n/a (not broken out)' : `${rr.toFixed(2)}:1 vs 2:1`
-  }
-  if (label.startsWith('J.')) {
-    const ext = values['Extension Above Breakout %']
-    return ext == null ? 'n/a (not broken out)' : `+${ext.toFixed(1)}% above breakout`
-  }
-  return null
-}
-
-const KNOWN_VALUE_KEYS = new Set([
-  'Open', 'High', 'Low', 'Close', 'Prev Close', 'EMA20', 'EMA50', 'EMA200', 'Prev resistance', 'Breakout Confirm Level',
-  'Volume', 'Volume MA(20)', 'RSI(14)', 'ADX(14)', 'ATR(14)', 'Stop Loss', 'Risk', 'Target', 'Reward', 'Risk:Reward',
-  'Extension Above Breakout %', 'Major Resistance (52w)', 'Nearest Resistance Above', '3D Return %', '5D Return %',
-  '10D Return %', 'Aggressive Entry', 'Conservative Entry', 'Preferred Entry',
-])
-
-function DetailPanel({ row }) {
-  const extras = Object.entries(row.values).filter(([k]) => !KNOWN_VALUE_KEYS.has(k))
-  const [chartBars, setChartBars] = useState(null)
-  const [chartError, setChartError] = useState(null)
-  const [fullChart, setFullChart] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    setChartBars(null)
-    setChartError(null)
-    fetch(`/api/chart?symbol=${encodeURIComponent(row.symbol)}`)
-      .then((r) => r.json())
-      .then((body) => {
-        if (cancelled) return
-        if (body.error) setChartError(body.error)
-        else setChartBars(body.bars)
-      })
-      .catch((e) => { if (!cancelled) setChartError(e.message || 'Could not load chart') })
-    return () => { cancelled = true }
-  }, [row.symbol])
-
-  return (
-    <div className="space-y-4 border-t p-5" style={{ borderColor: 'var(--gridline)', background: 'var(--page-plane)' }}>
-      <PriceHeader values={row.values} />
-      <OhlcStrip values={row.values} />
-
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h4 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-            Price Chart
-          </h4>
-          <button
-            onClick={() => setFullChart(true)}
-            className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-opacity hover:opacity-70"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-          >
-            <ExpandIcon /> Full chart
-          </button>
-        </div>
-        {chartError ? (
-          <p className="text-sm" style={{ color: 'var(--status-serious)' }}>{chartError}</p>
-        ) : chartBars ? (
-          <div
-            role="button"
-            tabIndex={0}
-            title="Open full chart"
-            onClick={() => setFullChart(true)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFullChart(true) }
-            }}
-          >
-            <CandlestickChart
-              bars={chartBars}
-              resistance={row.values['Prev resistance']}
-              breakoutConfirmLevel={row.values['Breakout Confirm Level']}
-              breakoutBarTime={row.values['Breakout Bar Time']}
-            />
-          </div>
-        ) : (
-          <div className="flex items-center justify-center text-sm" style={{ height: 200, color: 'var(--text-muted)' }}>
-            Loading chart…
-          </div>
-        )}
-      </div>
-      {fullChart && <FullChartModal row={row} onClose={() => setFullChart(false)} />}
-
-      <TrendLadder values={row.values} />
-      <TradePlan values={row.values} />
-      <EntryQualityPanel row={row} />
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <ResistanceMeter values={row.values} />
-        <VolumeMeter values={row.values} />
-        <RsiMeter values={row.values} />
-      </div>
-
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h4 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-            Hard Gates &amp; Checks
-          </h4>
-          <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-            raw pass/fail — see Setup vs. Entry above for the score
-          </span>
-        </div>
-        {row.passedAllGates === false && (
-          <div
-            className="mb-2 rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: 'var(--status-critical)', color: 'var(--status-critical)', background: 'var(--page-plane)' }}
-          >
-            ❌ Rejected — failed hard gate{row.checks.filter((c) => c.gate && !c.pass).length > 1 ? 's' : ''}:{' '}
-            {row.checks.filter((c) => c.gate && !c.pass).map((c) => c.label).join(', ')}
-          </div>
-        )}
-        <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-          {row.checks.map((c) => (
-            <li
-              key={c.label}
-              className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
-              style={{ borderColor: c.gate && !c.pass ? 'var(--status-critical)' : 'var(--border)' }}
-            >
-              <span className="flex items-center gap-2 text-sm">
-                <Dot color={c.pass ? 'var(--status-good)' : 'var(--status-critical)'} size={7} />
-                <span style={{ color: 'var(--text-primary)' }}>{c.label}</span>
-                {c.gate && (
-                  <span
-                    className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide"
-                    style={{ background: 'var(--gridline)', color: 'var(--text-secondary)' }}
-                  >
-                    Gate
-                  </span>
-                )}
-              </span>
-              <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{checkDetail(c.label, row.values)}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {extras.length > 0 && (
-        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-          {extras.map(([k, v]) => (
-            <div key={k} className="flex gap-1.5">
-              <dt>{k}:</dt>
-              <dd className="tabular font-medium" style={{ color: 'var(--text-secondary)' }}>{fmtValue(k, v)}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-
-      <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{row.verdict}</p>
     </div>
   )
 }
@@ -700,14 +185,20 @@ function FilterPill({ active, onClick, children }) {
   )
 }
 
-/** The Breakout Scanner / Near Breakout / Reversal Watch / Trade Journal tab row — shared by the
- *  main app shell AND the "no scan data yet" / "loading" screens, so every tab is reachable from
- *  anywhere, not just after a scan has completed. */
-function ViewTabs({ view, setView, reversalCount, watchlistCount = 0 }) {
+/** The Dashboard / Bullish Stocks / Reversal Watch / My Watchlist / Trade Journal tab row —
+ *  shared by the main app shell AND the "no scan data yet" / "loading" screens, so every tab is
+ *  reachable from anywhere, not just after a scan has completed. */
+function ViewTabs({ view, setView, reversalCount, watchlistCount = 0, intradayCount = 0 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      <FilterPill active={view === 'breakout'} onClick={() => setView('breakout')}>
-        Breakout Scanner
+      <FilterPill active={view === 'dashboard'} onClick={() => setView('dashboard')}>
+        Dashboard
+      </FilterPill>
+      <FilterPill active={view === 'bullish'} onClick={() => setView('bullish')}>
+        Bullish Stocks
+      </FilterPill>
+      <FilterPill active={view === 'intraday'} onClick={() => setView('intraday')}>
+        Intraday Scanner{intradayCount > 0 ? ` (${intradayCount})` : ''}
       </FilterPill>
       <FilterPill active={view === 'reversal'} onClick={() => setView('reversal')}>
         Reversal Watch{reversalCount > 0 ? ` (${reversalCount})` : ''}
@@ -718,81 +209,111 @@ function ViewTabs({ view, setView, reversalCount, watchlistCount = 0 }) {
       <FilterPill active={view === 'journal'} onClick={() => setView('journal')}>
         Trade Journal
       </FilterPill>
+      <FilterPill active={view === 'expenses'} onClick={() => setView('expenses')}>
+        Expenses
+      </FilterPill>
     </div>
   )
 }
 
 /**
- * The user's own followed symbols. Same expandable row as the scanner table so the detail panel,
- * chart and trade plan all work identically — the only differences are that every row is
- * removable and the list is the watchlist rather than the scanned universe.
+ * The user's own followed symbols, assessed by the bullish engine.
+ *
+ * <p>These rows used to come from the Breakout Scanner's A-J checklist. That feature has been
+ * removed, so each followed symbol is now scored by {@code /api/bullish-stocks/{symbol}} instead -
+ * the same 100-point assessment the ranked table uses, which means a watchlist row and a ranked
+ * row say exactly the same thing about the same stock. The expanded detail is the identical panel.
  */
-function WatchlistTable({ rows, expanded, setExpanded, onRemove }) {
+function WatchlistTable({ rows, expanded, setExpanded, onRemove, onOpenChart }) {
   return (
-    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-      <table className="w-full text-sm">
-        <thead>
-          <tr style={{ borderBottom: `1px solid ${'var(--gridline)'}` }}>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Symbol</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>A–J</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Setup / Entry</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Decision</th>
-            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Close</th>
-            <th className="px-4 py-3" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <Fragment key={row.symbol}>
-              <tr
-                onClick={() => setExpanded(expanded === row.symbol ? null : row.symbol)}
-                className="cursor-pointer transition-colors"
-                style={{ borderTop: `1px solid ${'var(--gridline)'}` }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                <td className="px-4 py-2.5">
-                  <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{row.name ?? row.symbol}</div>
-                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{row.symbol}</div>
-                </td>
-                <td className="px-4 py-2.5"><CheckDots checks={row.checks} /></td>
-                <td className="tabular px-4 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  S {row.setupScore}/{row.setupTotal} &middot; E {row.entryScore}/{row.entryTotal}
-                </td>
-                <td className="px-4 py-2.5"><DecisionBadge classification={row.classification} /></td>
-                <td className="tabular px-4 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>
-                  {row.values?.Close?.toFixed(2)}
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onRemove(row.symbol) }}
-                    className="transition-opacity hover:opacity-70"
-                    style={{ color: 'var(--text-muted)' }}
-                    title="Stop following this stock"
+    <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[52rem] text-sm">
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--gridline)' }}>
+              {['Stock', 'Score', 'Pattern', 'Trend', 'RSI', 'Price', 'Status', ''].map((h, i) => (
+                <th
+                  key={h || i}
+                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide ${i >= 4 && i <= 5 ? 'text-right' : 'text-left'}`}
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const meta = BULLISH_STATUS_META[row.tradeStatus] ?? { color: 'var(--text-muted)', label: row.tradeStatus }
+              return (
+                <Fragment key={row.symbol}>
+                  <tr
+                    onClick={() => setExpanded(expanded === row.symbol ? null : row.symbol)}
+                    className="cursor-pointer transition-colors"
+                    style={{ borderTop: '1px solid var(--gridline)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
-                    &#10005;
-                  </button>
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{row.name ?? row.symbol}</div>
+                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {row.symbol}{row.sector ? ` · ${row.sector}` : ''}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {num(row.score, 0)}
+                      </div>
+                      <div className="text-xs" style={{ color: CLASSIFICATION_COLOR[row.classification] ?? 'var(--text-muted)' }}>
+                        {row.classification}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{row.pattern.name}</td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{row.trend.label}</td>
+                    <td className="tabular px-4 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      {num(row.summary.rsi, 0)}
+                    </td>
+                    <td className="tabular px-4 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>
+                      {fmtPrice(row.price)}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold" style={{ color: meta.color }}>
+                        <Dot color={meta.color} size={7} />
+                        {meta.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onRemove(row.symbol) }}
+                        className="transition-opacity hover:opacity-70"
+                        style={{ color: 'var(--text-muted)' }}
+                        title="Stop following this stock"
+                      >
+                        &#10005;
+                      </button>
+                    </td>
+                  </tr>
+                  {expanded === row.symbol && (
+                    <tr>
+                      <td colSpan={8} className="p-0">
+                        <BullishDetailPanel row={row} onOpenChart={onOpenChart} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                  Nothing followed yet. Search for any NSE or BSE symbol above — it is saved to your
+                  account, so it will still be here on another browser or after clearing your cache.
                 </td>
               </tr>
-              {expanded === row.symbol && (
-                <tr>
-                  <td colSpan={6} className="p-0">
-                    <DetailPanel row={row} />
-                  </td>
-                </tr>
-              )}
-            </Fragment>
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
-                Nothing followed yet. Search for any NSE or BSE symbol above — it is saved to your
-                account, so it will still be here on another browser or after clearing your cache.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -1084,144 +605,6 @@ function EquityCurveChart({ rows }) {
  * SVG (no charting library loaded anywhere in this app), following the same hover-crosshair
  * pattern as EquityCurveChart above.
  */
-function CandlestickChart({ bars, resistance, breakoutConfirmLevel, breakoutBarTime }) {
-  const [hover, setHover] = useState(null)
-  const width = 700
-  const priceH = 200
-  const volH = 46
-  const gap = 8
-  const height = priceH + gap + volH
-  const padX = 6
-  const padTop = 10
-  const padBottom = 8
-
-  if (!bars || bars.length < 2) {
-    return (
-      <div className="flex items-center justify-center text-sm" style={{ height: priceH, color: 'var(--text-muted)' }}>
-        No chart data available.
-      </div>
-    )
-  }
-
-  const n = bars.length
-  let maxP = Math.max(...bars.map((b) => b.high));
-  let minP = Math.min(...bars.map((b) => b.low));
-  if (resistance != null) maxP = Math.max(maxP, resistance)
-  if (breakoutConfirmLevel != null) maxP = Math.max(maxP, breakoutConfirmLevel)
-  const pad = (maxP - minP) * 0.06 || maxP * 0.02
-  maxP += pad
-  minP -= pad
-  const priceRange = maxP - minP || 1
-  const maxVol = Math.max(...bars.map((b) => b.volume)) || 1
-
-  const slot = (width - 2 * padX) / n
-  const candleW = Math.max(1.5, slot * 0.62)
-  const xFor = (i) => padX + i * slot + slot / 2
-  const yFor = (v) => padTop + (1 - (v - minP) / priceRange) * (priceH - padTop - padBottom)
-  const volYFor = (v) => priceH + gap + volH - (v / maxVol) * (volH - 4)
-
-  const breakoutIndex = breakoutBarTime != null ? bars.findIndex((b) => b.time === breakoutBarTime) : -1
-
-  function handleMove(e) {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const relX = ((e.clientX - rect.left) / rect.width) * width
-    const idx = Math.min(n - 1, Math.max(0, Math.floor((relX - padX) / slot)))
-    setHover(idx)
-  }
-
-  const dateLabel = (t) => new Date(t * 1000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
-
-  return (
-    <div>
-      <div className="relative">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          className="w-full cursor-crosshair"
-          style={{ height }}
-          onMouseMove={handleMove}
-          onMouseLeave={() => setHover(null)}
-        >
-          {resistance != null && (
-            <>
-              <line x1={padX} y1={yFor(resistance)} x2={width - padX} y2={yFor(resistance)}
-                stroke="var(--status-warning)" strokeWidth="1" strokeDasharray="4,3" />
-              <text x={width - padX} y={yFor(resistance) - 3} textAnchor="end" fontSize="9" fill="var(--status-warning)">
-                Resistance {fmtPrice(resistance)}
-              </text>
-            </>
-          )}
-          {breakoutConfirmLevel != null && (
-            <>
-              <line x1={padX} y1={yFor(breakoutConfirmLevel)} x2={width - padX} y2={yFor(breakoutConfirmLevel)}
-                stroke="var(--status-good)" strokeWidth="1" strokeDasharray="4,3" />
-              <text x={width - padX} y={yFor(breakoutConfirmLevel) + 11} textAnchor="end" fontSize="9" fill="var(--status-good)">
-                Confirms {fmtPrice(breakoutConfirmLevel)}
-              </text>
-            </>
-          )}
-
-          {bars.map((b, i) => {
-            const up = b.close >= b.open
-            const color = up ? 'var(--status-good)' : 'var(--status-critical)'
-            const bodyTop = yFor(Math.max(b.open, b.close))
-            const bodyBottom = yFor(Math.min(b.open, b.close))
-            return (
-              <g key={b.time}>
-                <line x1={xFor(i)} y1={yFor(b.high)} x2={xFor(i)} y2={yFor(b.low)} stroke={color} strokeWidth="1" />
-                <rect x={xFor(i) - candleW / 2} y={bodyTop} width={candleW} height={Math.max(1, bodyBottom - bodyTop)} fill={color} />
-                <rect x={xFor(i) - candleW / 2} y={volYFor(b.volume)} width={candleW}
-                  height={Math.max(1, priceH + gap + volH - volYFor(b.volume))} fill={color} opacity="0.5" />
-              </g>
-            )
-          })}
-
-          {breakoutIndex >= 0 && (
-            <>
-              <line x1={xFor(breakoutIndex)} y1={padTop} x2={xFor(breakoutIndex)} y2={priceH - padBottom}
-                stroke="var(--accent)" strokeWidth="1.5" strokeDasharray="2,2" />
-              <polygon
-                points={`${xFor(breakoutIndex) - 5},${padTop - 1} ${xFor(breakoutIndex) + 5},${padTop - 1} ${xFor(breakoutIndex)},${padTop + 7}`}
-                fill="var(--accent)"
-              />
-              <text x={xFor(breakoutIndex)} y={padTop - 3} textAnchor="middle" fontSize="9" fontWeight="600" fill="var(--accent)">
-                Breakout
-              </text>
-            </>
-          )}
-
-          {hover != null && (
-            <line x1={xFor(hover)} y1={padTop} x2={xFor(hover)} y2={priceH + gap + volH}
-              stroke="var(--text-muted)" strokeWidth="1" strokeDasharray="2,2" />
-          )}
-        </svg>
-        {hover != null && (
-          <div
-            className="pointer-events-none absolute top-0 z-10 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs shadow-md"
-            style={{
-              borderColor: 'var(--border)', background: 'var(--surface-1)', color: 'var(--text-primary)',
-              left: `${(xFor(hover) / width) * 100}%`,
-              transform: `translateX(${hover > n / 2 ? '-108%' : '8%'})`,
-            }}
-          >
-            <div className="font-semibold">{dateLabel(bars[hover].time)}{hover === breakoutIndex ? ' — Breakout' : ''}</div>
-            <div style={{ color: 'var(--text-muted)' }}>
-              O {fmtPrice(bars[hover].open)} H {fmtPrice(bars[hover].high)} L {fmtPrice(bars[hover].low)} C {fmtPrice(bars[hover].close)}
-            </div>
-            <div className="tabular" style={{ color: 'var(--text-secondary)' }}>Vol {fmtVolume(bars[hover].volume)}</div>
-          </div>
-        )}
-      </div>
-      <div className="mt-1.5 flex items-center justify-between text-xs" style={{ color: 'var(--text-muted)' }}>
-        <span>{dateLabel(bars[0].time)}</span>
-        <span>{dateLabel(bars[n - 1].time)}</span>
-      </div>
-    </div>
-  )
-}
-
-// Every entry is a range Yahoo still serves at daily granularity, so the candles on screen are
-// always the same bars the scan's levels were computed from. (Its "max" range is not: it comes
-// back as monthly candles regardless of the interval requested, so 10Y is as far back as we go.)
 const CHART_RANGES = [
   { key: '1mo', label: '1M' },
   { key: '3mo', label: '3M' },
@@ -2020,15 +1403,2147 @@ function TradeJournalView() {
   )
 }
 
+const BULLISH_STATUS_META = {
+  'BUY NOW': { color: 'var(--status-good)', label: 'Buy now' },
+  'WAIT FOR BREAKOUT': { color: 'var(--accent)', label: 'Wait for breakout' },
+  'WAIT FOR RETEST': { color: 'var(--status-warning)', label: 'Wait for retest' },
+  'WAIT FOR PULLBACK': { color: 'var(--status-warning)', label: 'Wait for pullback' },
+  'AVOID CHASING': { color: 'var(--status-serious)', label: 'Avoid chasing' },
+  'FAILED SETUP': { color: 'var(--status-critical)', label: 'Failed setup' },
+}
+
+const CLASSIFICATION_COLOR = {
+  'A+ BULLISH': 'var(--status-good)',
+  'STRONG BULLISH': 'var(--status-good)',
+  'BULLISH WATCHLIST': 'var(--accent)',
+  'NEUTRAL / DEVELOPING': 'var(--text-muted)',
+  WEAK: 'var(--status-muted)',
+}
+
+const REGIME_META = {
+  BULLISH: { color: 'var(--status-good)', label: 'Bullish' },
+  NEUTRAL: { color: 'var(--status-warning)', label: 'Neutral' },
+  BEARISH: { color: 'var(--status-critical)', label: 'Bearish' },
+}
+
+const BULLISH_SORTS = [
+  { key: 'score', label: 'Score', get: (r) => r.score },
+  { key: 'rs', label: 'Rel. strength', get: (r) => r.summary.rs3mPct ?? -999 },
+  { key: 'volume', label: 'Volume', get: (r) => r.summary.volumeRatio ?? 0 },
+  { key: 'rr', label: 'R:R', get: (r) => r.summary.riskReward ?? 0 },
+]
+
+function num(v, digits = 2) {
+  return v == null || Number.isNaN(v) ? '—' : Number(v).toFixed(digits)
+}
+
+function signedPct(v, digits = 1) {
+  if (v == null || Number.isNaN(v)) return '—'
+  return `${v >= 0 ? '+' : ''}${Number(v).toFixed(digits)}%`
+}
+
+function StatusBadgeBullish({ status }) {
+  const meta = BULLISH_STATUS_META[status] ?? { color: 'var(--text-muted)', label: status }
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold" style={{ color: meta.color }}>
+      <Dot color={meta.color} size={7} />
+      {meta.label}
+    </span>
+  )
+}
+
+/** The market-condition banner the spec asks to show above everything else. */
+function MarketRegimeBanner({ regime }) {
+  if (!regime) return null
+  const meta = REGIME_META[regime.regime] ?? { color: 'var(--text-muted)', label: regime.regime }
+  return (
+    <div
+      className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-4 py-3"
+      style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}
+    >
+      <span className="flex items-center gap-2">
+        <Dot color={meta.color} size={9} />
+        <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+          Market regime
+        </span>
+        <span className="text-sm font-semibold" style={{ color: meta.color }}>{meta.label}</span>
+        <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>
+          {regime.score}/{regime.maxScore}
+        </span>
+      </span>
+      <span className="flex-1 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+        {regime.summary}
+      </span>
+      {!regime.allowsBuyNow && (
+        <span className="text-xs font-semibold" style={{ color: 'var(--status-critical)' }}>
+          Entries withheld in this regime
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** One component of the 100-point score, drawn as a filled bar so the shortfalls are visible. */
+function ScoreBar({ label, points, maxPoints }) {
+  const pct = maxPoints ? Math.max(0, Math.min(100, (points / maxPoints) * 100)) : 0
+  const color = pct >= 75 ? 'var(--status-good)' : pct >= 45 ? 'var(--status-warning)' : 'var(--status-critical)'
+  return (
+    <div>
+      <div className="flex items-baseline justify-between text-xs">
+        <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+        <span className="tabular font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {num(points, 1)}/{maxPoints}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--gridline)' }}>
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+      </div>
+    </div>
+  )
+}
+
+function DetailRow({ label, value, color }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-1">
+      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</span>
+      <span className="tabular text-xs font-semibold" style={{ color: color ?? 'var(--text-primary)' }}>{value}</span>
+    </div>
+  )
+}
+
+const SCORE_COMPONENT_LABELS = {
+  trend: 'Trend',
+  relativeStrength: 'Relative strength',
+  momentum: 'Momentum',
+  volume: 'Volume',
+  priceStructure: 'Price structure',
+  patternQuality: 'Pattern quality',
+  breakoutQuality: 'Breakout quality',
+  riskReward: 'Risk / reward',
+}
+
+/** Everything section 14 asks to show when a stock is selected. */
+function BullishDetailPanel({ row, onOpenChart }) {
+  const c = row.scoreBreakdown.components
+  const plan = row.tradePlan
+  return (
+    <div className="border-t px-4 py-4" style={{ borderColor: 'var(--gridline)', background: 'var(--page-plane)' }}>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-3xl text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          {row.whyBullish}
+        </p>
+        <button
+          onClick={(e) => { e.stopPropagation(); onOpenChart(row) }}
+          className="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-primary)', background: 'var(--surface-1)' }}
+        >
+          Open chart
+        </button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Score breakdown — {num(row.score, 1)}/100
+          </h4>
+          <div className="flex flex-col gap-2.5">
+            {Object.entries(SCORE_COMPONENT_LABELS).map(([key, label]) => (
+              <ScoreBar key={key} label={label} points={c[key].points} maxPoints={c[key].maxPoints} />
+            ))}
+          </div>
+          {row.scoreBreakdown.regimeMultiplier !== 1 && (
+            <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+              Raw {num(row.scoreBreakdown.rawTotal, 1)} × {row.scoreBreakdown.regimeMultiplier} market-regime adjustment.
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+              Pattern
+            </h4>
+            <div className="mb-1.5 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {row.pattern.name}
+              {row.pattern.confidence > 0 && (
+                <span className="tabular ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+                  {num(row.pattern.confidence, 0)}% confidence
+                </span>
+              )}
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              {row.pattern.explanation}
+            </p>
+          </div>
+
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+              Levels
+            </h4>
+            <DetailRow label="Current price" value={fmtPrice(row.price)} />
+            {row.breakout.level != null && <DetailRow label="Breakout level" value={fmtPrice(row.breakout.level)} />}
+            {row.pattern.resistance != null && <DetailRow label="Resistance / neckline" value={fmtPrice(row.pattern.resistance)} />}
+            {row.pattern.invalidationLevel != null && (
+              <DetailRow label="Pattern invalidation" value={fmtPrice(row.pattern.invalidationLevel)} />
+            )}
+            <DetailRow label="Breakout status" value={row.breakout.label} />
+            <DetailRow label="Setup stage" value={row.setupStage} />
+          </div>
+
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+              Trade plan
+            </h4>
+            {plan.present ? (
+              <>
+                <DetailRow label={`Entry (${plan.entryType.toLowerCase()})`} value={fmtPrice(plan.entry)} />
+                <DetailRow label="Stop loss" value={fmtPrice(plan.stopLoss)} color="var(--status-critical)" />
+                <DetailRow label="Target 1" value={fmtPrice(plan.target1)} color="var(--status-good)" />
+                <DetailRow label="Target 2" value={fmtPrice(plan.target2)} color="var(--status-good)" />
+                <DetailRow label="Risk" value={`${num(plan.riskPct, 1)}%`} />
+                <DetailRow label="Reward" value={`${num(plan.rewardPct, 1)}%`} />
+                <DetailRow label="Risk : reward" value={`${num(plan.riskReward, 1)}:1`} />
+              </>
+            ) : (
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{plan.explanation}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+              Indicators
+            </h4>
+            <DetailRow label="Trend" value={row.trend.label} />
+            <DetailRow label="Structure" value={row.trend.structure} />
+            <DetailRow label="Higher timeframes" value={row.higherTimeframes.verdict} />
+            <DetailRow label="RSI(14)" value={num(row.momentum.rsi, 1)} />
+            <DetailRow label="ADX(14)" value={num(row.momentum.adx, 1)} />
+            <DetailRow label="Volume vs 20D" value={`${num(row.volume.currentRatio, 2)}×`} />
+            <DetailRow label="Volume profile" value={row.volume.label} />
+          </div>
+
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+              Returns & relative strength
+            </h4>
+            <DetailRow label="1M return" value={signedPct(row.momentum.return1mPct)} />
+            <DetailRow label="3M return" value={signedPct(row.momentum.return3mPct)} />
+            <DetailRow label="6M return" value={signedPct(row.momentum.return6mPct)} />
+            <DetailRow label="1M vs market" value={signedPct(row.relativeStrength.excess1mPct)} />
+            <DetailRow label="3M vs market" value={signedPct(row.relativeStrength.excess3mPct)} />
+            <DetailRow label="6M vs market" value={signedPct(row.relativeStrength.excess6mPct)} />
+            <DetailRow label="3M vs Nifty 50" value={signedPct(row.relativeStrength.excessVsNifty50_3mPct)} />
+          </div>
+
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+              Extension check
+            </h4>
+            <DetailRow
+              label="Reading"
+              value={row.overextension.level}
+              color={row.overextension.level === 'NONE' ? 'var(--status-good)'
+                : row.overextension.level === 'MODERATE' ? 'var(--status-warning)' : 'var(--status-critical)'}
+            />
+            <DetailRow label="ATRs above EMA20" value={num(row.overextension.atrsAboveEma20, 1)} />
+            <DetailRow label="Above EMA50" value={signedPct(row.overextension.pctAboveEma50)} />
+            <p className="mt-2 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              {row.overextension.explanation}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-4 text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+        {row.statusReason} This is a ranking of setup quality from price and volume data — not a forecast,
+        and not a promise of any particular return.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * The Bullish Stocks tab: a Nifty 500 ranking by setup quality.
+ *
+ * <p>The ranking itself is owned by App rather than by this component. The dashboard has to report
+ * whether the ranking has run and what it found, and opening this tab is what starts the scan - so
+ * the state has to outlive the tab being mounted. What stays local is only what nothing else cares
+ * about: the filter, sort and expansion of the table.
+ */
+function BullishStocksView({ data, scanning, progress, scanError, loadError, onScan, queued }) {
+  const [status, setStatus] = useState('ALL')
+  const [pattern, setPattern] = useState('ALL')
+  const [sector, setSector] = useState('ALL')
+  const [sortKey, setSortKey] = useState('score')
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState(null)
+  const [chartRow, setChartRow] = useState(null)
+
+  // Memoised so the filter/derivation hooks below do not see a fresh array identity every render.
+  const stocks = useMemo(() => data?.stocks ?? [], [data])
+
+  const patterns = useMemo(
+    () => ['ALL', ...Array.from(new Set(stocks.map((r) => r.pattern.name))).sort()],
+    [stocks]
+  )
+  const sectors = useMemo(
+    () => ['ALL', ...Array.from(new Set(stocks.map((r) => r.sector).filter(Boolean))).sort()],
+    [stocks]
+  )
+  const statuses = useMemo(
+    () => ['ALL', ...Object.keys(BULLISH_STATUS_META).filter((s) => stocks.some((r) => r.tradeStatus === s))],
+    [stocks]
+  )
+
+  const rows = useMemo(() => {
+    let r = stocks
+    if (status !== 'ALL') r = r.filter((x) => x.tradeStatus === status)
+    if (pattern !== 'ALL') r = r.filter((x) => x.pattern.name === pattern)
+    if (sector !== 'ALL') r = r.filter((x) => x.sector === sector)
+    if (query.trim()) {
+      const q = query.trim().toUpperCase()
+      r = r.filter((x) => x.symbol.toUpperCase().includes(q) || (x.name ?? '').toUpperCase().includes(q))
+    }
+    const sort = BULLISH_SORTS.find((s) => s.key === sortKey) ?? BULLISH_SORTS[0]
+    return [...r].sort((a, b) => sort.get(b) - sort.get(a))
+  }, [stocks, status, pattern, sector, query, sortKey])
+
+  // No ranking yet. Opening this tab starts one, so the usual case is that a scan is already
+  // under way by the time this renders — which is a progress report, not an empty state.
+  if (!data) {
+    return (
+      <div
+        className="mx-auto max-w-md rounded-2xl border p-8 text-center"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', boxShadow: 'var(--shadow-md)' }}
+      >
+        {queued && !scanning ? (
+          <>
+            <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
+            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Queued</p>
+            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              Waiting for the reversal scan to finish, then the ranking starts automatically. They
+              share the same fetched bars, so running them one after the other is far faster.
+            </p>
+          </>
+        ) : scanning ? (
+          <>
+            <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
+            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Ranking the Nifty 500…
+            </p>
+            <p className="tabular mx-auto mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+              {progress ?? 'Starting…'}
+            </p>
+            <p className="mx-auto mt-3 max-w-xs text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              The first run of a session fetches around 500 symbols. You can switch tabs while it
+              finishes — it keeps going in the background.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {scanError || (loadError && loadError !== 'no-ranking-yet') ? 'Could not build the ranking' : 'No ranking yet'}
+            </p>
+            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              {scanError || (loadError && loadError !== 'no-ranking-yet')
+                ? (scanError ?? loadError)
+                : 'Rank the Nifty 500 on trend, relative strength, momentum, volume, structure, pattern, breakout quality and risk/reward.'}
+            </p>
+            <button
+              onClick={onScan}
+              className="mt-6 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+              style={{ background: 'var(--accent)' }}
+            >
+              {scanError ? 'Try again' : 'Rank Nifty 500'}
+            </button>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {data.analyzedStockCount} of {data.universeSize} ranked
+          {data.failedCount > 0 ? ` · ${data.failedCount} skipped for short history` : ''}
+          {' · updated '}{new Date(data.timestamp).toLocaleString()}
+        </p>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={onScan}
+            disabled={scanning}
+            className="flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-60"
+            style={{ borderColor: 'var(--btn-scan-border)', background: 'var(--btn-scan-bg)', color: 'var(--text-primary)' }}
+          >
+            <span className={scanning ? 'inline-block animate-spin' : 'inline-block'}>&#8635;</span>
+            {scanning ? 'Ranking…' : 'Re-rank'}
+          </button>
+          {scanning && progress && (
+            <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{progress}</span>
+          )}
+          {scanError && <span className="text-xs" style={{ color: 'var(--status-serious)' }}>{scanError}</span>}
+        </div>
+      </div>
+
+      <MarketRegimeBanner regime={data.marketRegime} />
+
+      <div className="mb-6 flex flex-wrap gap-3">
+        <StatTile label="Bullish" value={data.bullishStockCount} color="var(--accent)" />
+        <StatTile label="A+ setups" value={data.aPlusCount} color="var(--status-good)" />
+        <StatTile label="Breakouts" value={data.breakoutCount} color="var(--status-good)" />
+        <StatTile label="Pullbacks / retests" value={data.pullbackCount} color="var(--status-warning)" />
+        <StatTile label="Buy now" value={data.buyNowCount} color="var(--status-good)" />
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Status</span>
+          <div className="flex flex-wrap gap-1.5">
+            {statuses.map((s) => (
+              <FilterPill key={s} active={status === s} onClick={() => setStatus(s)}>
+                {s === 'ALL' ? 'All' : (BULLISH_STATUS_META[s]?.label ?? s)}
+              </FilterPill>
+            ))}
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Sort</span>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value)}
+            className="rounded-lg border px-2 py-1.5 text-xs"
+            style={inputStyle}
+          >
+            {BULLISH_SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Pattern</span>
+          <select
+            value={pattern}
+            onChange={(e) => setPattern(e.target.value)}
+            className="rounded-lg border px-2 py-1.5 text-xs"
+            style={inputStyle}
+          >
+            {patterns.map((p) => <option key={p} value={p}>{p === 'ALL' ? 'All' : p}</option>)}
+          </select>
+        </label>
+
+        {sectors.length > 1 && (
+          <label className="flex items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Sector</span>
+            <select
+              value={sector}
+              onChange={(e) => setSector(e.target.value)}
+              className="max-w-[11rem] rounded-lg border px-2 py-1.5 text-xs"
+              style={inputStyle}
+            >
+              {sectors.map((s) => <option key={s} value={s}>{s === 'ALL' ? 'All' : s}</option>)}
+            </select>
+          </label>
+        )}
+
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name or symbol…"
+          className="ml-auto w-52 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2"
+          style={{ ...inputStyle, '--tw-ring-color': 'var(--accent)' }}
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[68rem] text-sm">
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--gridline)' }}>
+                {['#', 'Stock', 'Score', 'Pattern', 'Trend', 'RS 3M', 'RSI', 'ADX', 'Vol', 'Entry', 'SL', 'Target', 'R:R', 'Status']
+                  .map((h, i) => (
+                    <th
+                      key={h}
+                      className={`px-3 py-3 text-xs font-semibold uppercase tracking-wide ${i >= 5 && i <= 12 ? 'text-right' : 'text-left'}`}
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <Fragment key={row.symbol}>
+                  <tr
+                    onClick={() => setExpanded(expanded === row.symbol ? null : row.symbol)}
+                    className="cursor-pointer transition-colors"
+                    style={{ borderTop: '1px solid var(--gridline)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td className="tabular px-3 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{row.rank}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{row.name ?? row.symbol}</div>
+                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {row.symbol}{row.sector ? ` · ${row.sector}` : ''}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {num(row.score, 0)}
+                      </div>
+                      <div className="text-xs" style={{ color: CLASSIFICATION_COLOR[row.classification] ?? 'var(--text-muted)' }}>
+                        {row.classification}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      {row.pattern.name}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      {row.trend.label}
+                    </td>
+                    <td
+                      className="tabular px-3 py-2.5 text-right text-xs"
+                      style={{ color: (row.summary.rs3mPct ?? 0) >= 0 ? 'var(--status-good)' : 'var(--status-critical)' }}
+                    >
+                      {signedPct(row.summary.rs3mPct)}
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      {num(row.summary.rsi, 0)}
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      {num(row.summary.adx, 0)}
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      {num(row.summary.volumeRatio, 1)}×
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-primary)' }}>
+                      {row.summary.entry != null ? fmtPrice(row.summary.entry) : '—'}
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--status-critical)' }}>
+                      {row.summary.stopLoss != null ? fmtPrice(row.summary.stopLoss) : '—'}
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--status-good)' }}>
+                      {row.summary.target != null ? fmtPrice(row.summary.target) : '—'}
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      {row.summary.riskReward != null ? `${num(row.summary.riskReward, 1)}:1` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <StatusBadgeBullish status={row.tradeStatus} />
+                    </td>
+                  </tr>
+                  {expanded === row.symbol && (
+                    <tr>
+                      <td colSpan={14} className="p-0">
+                        <BullishDetailPanel row={row} onOpenChart={setChartRow} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={14} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                    No stocks match this filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {chartRow && (
+        <FullChartModal
+          row={{
+            symbol: chartRow.symbol,
+            name: chartRow.name,
+            values: {
+              'Prev resistance': chartRow.breakout.level,
+              'Breakout Confirm Level': chartRow.breakout.confirmedLevel,
+            },
+          }}
+          onClose={() => setChartRow(null)}
+        />
+      )}
+    </>
+  )
+}
+
+const INTRADAY_INTERVALS = ['5m', '15m', '60m']
+
+const INTRADAY_SIDES = [
+  { key: 'bullish', label: 'Bullish', accent: 'var(--status-good)' },
+  { key: 'reversal', label: 'Reversal', accent: 'var(--status-critical)' },
+]
+
+function signedCell(pct, digits = 1) {
+  if (pct == null || Number.isNaN(pct)) return { text: '—', color: 'var(--text-muted)' }
+  return {
+    text: `${pct >= 0 ? '+' : ''}${Number(pct).toFixed(digits)}%`,
+    color: pct >= 0 ? 'var(--status-good)' : 'var(--status-critical)',
+  }
+}
+
+/** The expanded row: why this candle fired, and the readings behind it. */
+function IntradayDetail({ row, side }) {
+  const accent = side === 'bullish' ? 'var(--status-good)' : 'var(--status-critical)'
+  return (
+    <div className="border-t px-4 py-4" style={{ borderColor: 'var(--gridline)', background: 'var(--page-plane)' }}>
+      <p className="mb-4 max-w-4xl text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+        {row.explanation}
+      </p>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Candle
+          </h4>
+          <div className="mb-1.5 text-sm font-semibold" style={{ color: accent }}>{row.pattern.name}</div>
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            {row.pattern.description}
+          </p>
+          <div className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Strength {row.pattern.strength}/3 · signal score {num(row.score, 1)}/10
+          </div>
+        </div>
+
+        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Levels
+          </h4>
+          <DetailRow label="Price" value={fmtPrice(row.price)} />
+          <DetailRow label="EMA" value={fmtPrice(row.ema)} />
+          <DetailRow label="VWAP" value={Number.isNaN(row.vwap) || row.vwap == null ? '—' : fmtPrice(row.vwap)} />
+          <DetailRow label="Distance from EMA" value={signedCell(row.distanceFromEmaPct).text}
+            color={signedCell(row.distanceFromEmaPct).color} />
+          <DetailRow label="Distance from VWAP" value={signedCell(row.distanceFromVwapPct).text}
+            color={signedCell(row.distanceFromVwapPct).color} />
+        </div>
+
+        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Momentum & participation
+          </h4>
+          <DetailRow label="RSI(14)" value={num(row.rsi, 1)} />
+          <DetailRow label="Volume vs average" value={`${num(row.volumeRatio, 2)}×`} />
+          <DetailRow label="Candle change" value={signedCell(row.changePct, 2).text}
+            color={signedCell(row.changePct, 2).color} />
+          <DetailRow label="Previous close" value={fmtPrice(row.previousClose)} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The Intraday Scanner: two strategies over the same candles, shown as sub-tabs.
+ *
+ * <p>One scan feeds both sides. Each symbol's intraday series is fetched once and both strategies
+ * are evaluated on it, so splitting Bullish and Reversal into separate scans would double the work
+ * to answer the same question - they are two readings of one dataset, not two datasets.
+ */
+function IntradayView({ data, scanning, progress, scanError, loadError, onScan, queued, interval, onIntervalChange }) {
+  const [side, setSide] = useState('bullish')
+  const [pattern, setPattern] = useState('ALL')
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState(null)
+
+  // The pattern filter belongs to whichever side is showing — the two vocabularies are disjoint.
+  useEffect(() => { setPattern('ALL'); setExpanded(null) }, [side])
+
+  const rows = useMemo(() => {
+    const all = data?.[side] ?? []
+    let r = all
+    if (pattern !== 'ALL') r = r.filter((x) => x.patternType === pattern)
+    if (query.trim()) {
+      const q = query.trim().toUpperCase()
+      r = r.filter((x) => x.symbol.toUpperCase().includes(q) || (x.name ?? '').toUpperCase().includes(q))
+    }
+    return r
+  }, [data, side, pattern, query])
+
+  // Only patterns that actually fired, so the dropdown never offers an empty filter.
+  const patternOptions = useMemo(() => {
+    const vocabulary = (side === 'bullish' ? data?.bullishPatterns : data?.reversalPatterns) ?? {}
+    const present = new Set((data?.[side] ?? []).map((x) => x.patternType))
+    return Object.entries(vocabulary)
+      .filter(([type]) => present.has(type))
+      .sort((a, b) => a[1].localeCompare(b[1]))
+  }, [data, side])
+
+  if (!data) {
+    return (
+      <div className="mx-auto max-w-md rounded-2xl border p-8 text-center"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', boxShadow: 'var(--shadow-md)' }}>
+        {queued && !scanning ? (
+          <>
+            <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
+            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Queued</p>
+            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              Waiting for the running scan to finish, then the intraday scan starts automatically.
+            </p>
+          </>
+        ) : scanning ? (
+          <>
+            <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
+            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Scanning intraday candles…
+            </p>
+            <p className="tabular mx-auto mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>{progress ?? 'Starting…'}</p>
+            <p className="mx-auto mt-3 max-w-xs text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              Intraday candles are a separate series from the daily scans, so this pass fetches the
+              universe again. You can switch tabs while it finishes.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="mx-auto w-fit"><LogoBadge size={48} /></div>
+            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {scanError || loadError ? 'Could not run the intraday scan' : 'Intraday scan has not run yet'}
+            </p>
+            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              {scanError || loadError
+                || 'Scans the Nifty 500 on intraday candles for bullish continuation setups and overbought reversals.'}
+            </p>
+            <button onClick={() => onScan(interval)}
+              className="mt-6 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+              style={{ background: 'var(--accent)' }}>
+              {scanError ? 'Try again' : 'Run intraday scan'}
+            </button>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  const strategy = data.strategy?.[side]
+  const accent = INTRADAY_SIDES.find((s) => s.key === side).accent
+
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {data.analyzedCount} of {data.universeSize} scanned on {data.interval} candles
+          {data.latestCandleTime
+            ? ` · last candle ${new Date(data.latestCandleTime * 1000).toLocaleString()}`
+            : ''}
+        </p>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+              Candle
+            </span>
+            <select value={interval} onChange={(e) => onIntervalChange(e.target.value)}
+              className="rounded-lg border px-2 py-1.5 text-xs" style={inputStyle}>
+              {INTRADAY_INTERVALS.map((iv) => <option key={iv} value={iv}>{iv}</option>)}
+            </select>
+            <button onClick={() => onScan(interval)} disabled={scanning}
+              className="flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-60"
+              style={{ borderColor: 'var(--btn-scan-border)', background: 'var(--btn-scan-bg)', color: 'var(--text-primary)' }}>
+              <span className={scanning ? 'inline-block animate-spin' : 'inline-block'}>&#8635;</span>
+              {scanning ? 'Scanning…' : 'Rescan'}
+            </button>
+          </div>
+          {scanning && progress && <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{progress}</span>}
+          {scanError && <span className="text-xs" style={{ color: 'var(--status-serious)' }}>{scanError}</span>}
+        </div>
+      </div>
+
+      {/* The two strategies, as sub-tabs. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {INTRADAY_SIDES.map((s) => {
+          const count = data[s.key]?.length ?? 0
+          const active = side === s.key
+          return (
+            <button key={s.key} onClick={() => setSide(s.key)}
+              className="rounded-lg border px-4 py-2 text-sm font-semibold transition-colors"
+              style={active
+                ? { background: s.accent, borderColor: s.accent, color: '#fff' }
+                : { background: 'var(--surface-1)', borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              {s.label}{count > 0 ? ` (${count})` : ''}
+            </button>
+          )
+        })}
+      </div>
+
+      {strategy && (
+        <div className="mb-4 rounded-xl border px-4 py-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <div className="flex items-start gap-2">
+            <Dot color={accent} size={8} />
+            <div>
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                Strategy
+              </span>
+              <p className="mt-0.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{strategy}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-6 flex flex-wrap gap-3">
+        <StatTile label="Signals" value={data[side]?.length ?? 0} color={accent} />
+        <StatTile label="Showing" value={rows.length} />
+        <StatTile label="Patterns firing" value={patternOptions.length} />
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+        <label className="flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Pattern</span>
+          <select value={pattern} onChange={(e) => setPattern(e.target.value)}
+            className="max-w-[14rem] rounded-lg border px-2 py-1.5 text-xs" style={inputStyle}>
+            <option value="ALL">All patterns</option>
+            {patternOptions.map(([type, label]) => <option key={type} value={type}>{label}</option>)}
+          </select>
+        </label>
+        <input value={query} onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name or symbol…"
+          className="ml-auto w-52 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2"
+          style={{ ...inputStyle, '--tw-ring-color': 'var(--accent)' }} />
+      </div>
+
+      <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[58rem] text-sm">
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--gridline)' }}>
+                {['#', 'Stock', 'Score', 'Pattern', 'Price', 'Candle', 'RSI', 'vs EMA', 'vs VWAP', 'Vol']
+                  .map((h, i) => (
+                    <th key={h} className={`px-3 py-3 text-xs font-semibold uppercase tracking-wide ${i >= 4 ? 'text-right' : 'text-left'}`}
+                      style={{ color: 'var(--text-muted)' }}>{h}</th>
+                  ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const chg = signedCell(row.changePct, 2)
+                const ema = signedCell(row.distanceFromEmaPct)
+                const vwap = signedCell(row.distanceFromVwapPct)
+                return (
+                  <Fragment key={row.symbol}>
+                    <tr onClick={() => setExpanded(expanded === row.symbol ? null : row.symbol)}
+                      className="cursor-pointer transition-colors"
+                      style={{ borderTop: '1px solid var(--gridline)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                      <td className="tabular px-3 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{row.rank}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{row.name ?? row.symbol}</div>
+                        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{row.symbol}</div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="tabular rounded px-1.5 py-0.5 text-xs font-semibold"
+                          style={{ background: 'var(--accent-wash)', color: 'var(--accent)' }}>
+                          {num(row.score, 1)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs" style={{ color: accent }}>{row.patternName}</td>
+                      <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>{fmtPrice(row.price)}</td>
+                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: chg.color }}>{chg.text}</td>
+                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>{num(row.rsi, 0)}</td>
+                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: ema.color }}>{ema.text}</td>
+                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: vwap.color }}>{vwap.text}</td>
+                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>{num(row.volumeRatio, 1)}×</td>
+                    </tr>
+                    {expanded === row.symbol && (
+                      <tr>
+                        <td colSpan={10} className="p-0"><IntradayDetail row={row} side={side} /></td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                    {(data[side]?.length ?? 0) === 0
+                      ? `No ${side} setups fired on the last ${data.interval} candle.`
+                      : 'No stocks match this filter.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  )
+}
+
+const inr = (n) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
+
+/** Signed money, with the minus inside the currency rather than before it. */
+const inrSigned = (n) => (Number(n) < 0 ? '−' + inr(Math.abs(n)).slice(1) : inr(n))
+
+/** Compact money for chart labels, where four digits of precision is noise. */
+const inrShort = (n) => {
+  const v = Math.abs(Number(n) || 0)
+  const sign = Number(n) < 0 ? '−' : ''
+  if (v >= 10000000) return `${sign}₹${(v / 10000000).toFixed(1)}Cr`
+  if (v >= 100000) return `${sign}₹${(v / 100000).toFixed(1)}L`
+  if (v >= 1000) return `${sign}₹${Math.round(v / 1000)}k`
+  return sign + '₹' + Math.round(v)
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** The three ways every rupee of income ends up, and the colour each carries throughout. */
+const ALLOCATION = {
+  emi: { label: 'Loan EMIs', color: 'var(--status-serious)' },
+  expenses: { label: 'Fixed expenses', color: 'var(--accent)' },
+  savings: { label: 'Left over', color: 'var(--status-good)' },
+}
+
+function periodLabel(period) {
+  if (!period) return ''
+  const [y, m] = period.split('-').map(Number)
+  return `${MONTH_NAMES[m - 1]} ${y}`
+}
+
+function shiftPeriod(period, delta) {
+  const [y, m] = period.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function thisPeriod() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function MoneyField({ value, onChange, align = 'right', bold = true }) {
+  return (
+    <span className="flex items-center">
+      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>₹</span>
+      <input
+        type="number"
+        className="tabular w-28 rounded-md px-1.5 py-1 text-sm outline-none transition-colors focus:bg-[var(--accent-wash)]"
+        style={{
+          border: 'none', background: 'transparent', textAlign: align,
+          fontWeight: bold ? 600 : 500, color: 'var(--text-primary)',
+        }}
+        value={value}
+        onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+      />
+    </span>
+  )
+}
+
+/** Prev / label / next, as one segmented control rather than three loose buttons. */
+function PeriodStepper({ label, onPrev, onNext, onToday, showToday, width = '7rem' }) {
+  const btn = {
+    background: 'transparent', border: 'none', color: 'var(--text-secondary)',
+    padding: '0.4rem 0.7rem', cursor: 'pointer', fontSize: 14, lineHeight: 1,
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center overflow-hidden rounded-lg border"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+        <button onClick={onPrev} style={btn} title="Previous">←</button>
+        <span className="border-x px-3 py-1.5 text-center text-sm font-semibold"
+          style={{ borderColor: 'var(--gridline)', color: 'var(--text-primary)', minWidth: width }}>
+          {label}
+        </span>
+        <button onClick={onNext} style={btn} title="Next">→</button>
+      </div>
+      {showToday && (
+        <button onClick={onToday} className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>
+          Today
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Where the month's income actually went, as one stacked bar.
+ *
+ * <p>This replaced a single "committed" bar, which could only say how much was spent and not on
+ * what. The split is the useful part: EMIs and rent are very different problems, and one bar that
+ * merges them hides which of the two a month is actually losing to.
+ */
+function AllocationBar({ income, emi, expenses, savings }) {
+  const total = Math.max(income, emi + expenses, 1)
+  const seg = (v) => `${Math.max(0, (v / total) * 100)}%`
+  const short = savings < 0
+
+  return (
+    <div>
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--gridline)' }}>
+        <div style={{ width: seg(emi), background: ALLOCATION.emi.color }} title={`EMIs ${inr(emi)}`} />
+        <div style={{ width: seg(expenses), background: ALLOCATION.expenses.color }} title={`Expenses ${inr(expenses)}`} />
+        {!short && <div style={{ width: seg(savings), background: ALLOCATION.savings.color }} title={`Left ${inr(savings)}`} />}
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5">
+        {[
+          ['emi', emi], ['expenses', expenses],
+          ...(short ? [] : [['savings', savings]]),
+        ].map(([k, v]) => (
+          <span key={k} className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ background: ALLOCATION[k].color }} />
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{ALLOCATION[k].label}</span>
+            <span className="tabular text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{inr(v)}</span>
+            {income > 0 && (
+              <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>
+                {Math.round((v / income) * 100)}%
+              </span>
+            )}
+          </span>
+        ))}
+        {short && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ background: 'var(--status-critical)' }} />
+            <span className="text-xs font-semibold" style={{ color: 'var(--status-critical)' }}>
+              Over by {inr(Math.abs(savings))}
+            </span>
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The headline: what is left, how that compares with last month, and where the rest went. */
+function CashflowHero({ income, emi, expenses, savings, previousSavings, onIncomeChange }) {
+  const short = savings < 0
+  const accent = short ? 'var(--status-critical)' : 'var(--status-good)'
+  const rate = income > 0 ? (savings / income) * 100 : null
+  const delta = previousSavings == null ? null : savings - previousSavings
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-xl border"
+      style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', boxShadow: 'var(--shadow-md)' }}>
+      <div className="h-1 w-full" style={{ background: accent }} />
+      <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            {short ? 'Short this month' : 'Left after everything'}
+          </div>
+          <div className="tabular mt-1 text-4xl font-semibold tracking-tight" style={{ color: accent }}>
+            {inrSigned(savings)}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {rate != null && (
+              <span className="rounded px-1.5 py-0.5 text-xs font-semibold"
+                style={{ background: 'var(--accent-wash)', color: 'var(--accent)' }}>
+                {Math.round(rate)}% of income saved
+              </span>
+            )}
+            {delta != null && (
+              <span className="tabular text-xs font-semibold"
+                style={{ color: delta >= 0 ? 'var(--status-good)' : 'var(--status-critical)' }}>
+                {delta >= 0 ? '▲' : '▼'} {inr(Math.abs(delta))} vs last month
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 flex items-center justify-between border-t pt-3" style={{ borderColor: 'var(--gridline)' }}>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Take-home salary</span>
+            <MoneyField value={income} onChange={onIncomeChange} />
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-center lg:border-l lg:pl-5" style={{ borderColor: 'var(--gridline)' }}>
+          <div className="mb-2.5 text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Where it goes
+          </div>
+          <AllocationBar income={income} emi={emi} expenses={expenses} savings={savings} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What each finishing EMI hands back, as a timeline.
+ *
+ * <p>The most useful thing in a cashflow this loan-heavy: today's surplus is not the number that
+ * matters, the one after the next EMI ends is. Drawn as dated milestones rather than bars, because
+ * the question is <em>when</em> the money arrives, and a bar chart answers "how much" instead.
+ */
+function LoanForecast({ loans, surplus }) {
+  const events = loans
+    .filter((l) => Number(l.amount) > 0 && Number(l.remainingMonths) > 0)
+    .map((l) => ({ month: Number(l.remainingMonths), emi: Number(l.amount), name: l.name }))
+    .sort((a, b) => a.month - b.month)
+
+  if (events.length === 0) return null
+
+  const steps = []
+  let running = surplus
+  events.forEach((e) => {
+    running += e.emi
+    steps.push({ ...e, value: running })
+  })
+  const finalValue = running
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--gridline)' }}>
+        <div>
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>As your loans clear</span>
+          <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Each EMI that ends frees up that cash every month afterwards
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="tabular text-lg font-semibold" style={{ color: 'var(--status-good)' }}>{inrSigned(finalValue)}</div>
+          <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            once all clear
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 py-3">
+        <div className="flex items-center gap-3 pb-3">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: 'var(--text-muted)' }} />
+          <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Today</span>
+          <span className="tabular ml-auto text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {inrSigned(surplus)}
+          </span>
+        </div>
+        {steps.map((s, i) => (
+          <div key={i} className="relative flex items-center gap-3 py-2">
+            {/* connector back to the previous milestone */}
+            <span className="absolute left-[4.5px] top-0 w-px" style={{ height: '50%', background: 'var(--gridline)' }} />
+            {i < steps.length - 1 && (
+              <span className="absolute left-[4.5px] bottom-0 w-px" style={{ height: '50%', background: 'var(--gridline)' }} />
+            )}
+            <span className="relative z-10 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: 'var(--status-good)' }} />
+            <div className="min-w-0">
+              <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{s.name} clears</div>
+              <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>in {s.month} month{s.month === 1 ? '' : 's'}</div>
+            </div>
+            <div className="ml-auto text-right">
+              <div className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{inrSigned(s.value)}</div>
+              <div className="tabular text-[11px] font-semibold" style={{ color: 'var(--status-good)' }}>
+                +{inr(s.emi).slice(1)}/mo
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A ledger of loans or expenses.
+ *
+ * <p>Each row carries a bar showing its share of income. A column of numbers tells you the total;
+ * the bars tell you which single line is the problem, which is the question someone opens this
+ * page to answer.
+ */
+function Ledger({ title, hint, items, income, total, accent, showTenure, onChange, onAdd, onRemove }) {
+  const peak = Math.max(...items.map((i) => Number(i.amount) || 0), 1)
+  return (
+    <div className="mb-4 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--gridline)' }}>
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full" style={{ background: accent }} />
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</span>
+          <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+            style={{ background: 'var(--gridline)', color: 'var(--text-secondary)' }}>
+            {items.length}
+          </span>
+        </div>
+        <div className="text-right">
+          <span className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{inr(total)}</span>
+          {income > 0 && (
+            <span className="tabular ml-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+              {Math.round((total / income) * 100)}%
+            </span>
+          )}
+        </div>
+      </div>
+
+      {hint && <p className="px-4 pt-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{hint}</p>}
+
+      <div className="px-4 pb-3 pt-1">
+        {items.length === 0 && (
+          <p className="py-4 text-center text-xs" style={{ color: 'var(--text-muted)' }}>Nothing here yet.</p>
+        )}
+        {items.map((item, i) => (
+          <div key={i} className="border-b py-2 last:border-b-0" style={{ borderColor: 'var(--gridline)' }}>
+            <div className="flex items-center gap-2">
+              <input
+                className="min-w-0 flex-1 rounded-md px-1 py-1 text-sm font-medium outline-none transition-colors focus:bg-[var(--accent-wash)]"
+                style={{ border: 'none', background: 'transparent', color: 'var(--text-primary)' }}
+                value={item.name}
+                onChange={(e) => onChange(i, { ...item, name: e.target.value })}
+              />
+              {showTenure && (
+                <span className="flex shrink-0 items-center gap-1" title="Months of EMI left after this one">
+                  <input
+                    type="number"
+                    className="tabular w-11 rounded-md py-1 text-center text-xs font-semibold outline-none"
+                    style={{ background: 'var(--gridline)', color: 'var(--text-primary)', border: 'none' }}
+                    value={item.remainingMonths ?? ''}
+                    onChange={(e) => onChange(i, { ...item, remainingMonths: e.target.value === '' ? null : Number(e.target.value) })}
+                  />
+                  <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>mo</span>
+                </span>
+              )}
+              <MoneyField value={item.amount} onChange={(v) => onChange(i, { ...item, amount: v })} />
+              <button onClick={() => onRemove(i)} className="shrink-0 px-1 text-sm transition-opacity hover:opacity-60"
+                style={{ color: 'var(--text-muted)' }} title="Remove">&#10005;</button>
+            </div>
+            <div className="mt-1 h-1 w-full overflow-hidden rounded-full" style={{ background: 'var(--page-plane)' }}>
+              <div className="h-full rounded-full"
+                style={{ width: `${Math.max(1, ((Number(item.amount) || 0) / peak) * 100)}%`, background: accent, opacity: 0.55 }} />
+            </div>
+          </div>
+        ))}
+        <button onClick={onAdd}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-xs font-semibold transition-colors"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)' }}>
+          + Add {showTenure ? 'a loan' : 'an expense'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** One headline figure in a metric strip. */
+function Metric({ label, value, color, sub }) {
+  return (
+    <div className="flex-1" style={{ minWidth: '8rem' }}>
+      <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{label}</div>
+      <div className="tabular mt-0.5 text-xl font-semibold" style={{ color: color ?? 'var(--text-primary)' }}>{value}</div>
+      {sub && <div className="mt-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>{sub}</div>}
+    </div>
+  )
+}
+
+function MetricStrip({ children }) {
+  return (
+    <div className="mb-4 flex flex-wrap gap-x-8 gap-y-4 rounded-xl border p-4"
+      style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      {children}
+    </div>
+  )
+}
+
+/** Savings per month, on a zero baseline so a short month reads as the deficit it is. */
+function YearChart({ months }) {
+  if (!months || months.length === 0) return null
+  const peak = Math.max(...months.map((m) => Math.abs(m.savings)), 1)
+  const anyNegative = months.some((m) => m.savings < 0)
+  const plot = 120
+
+  return (
+    <div>
+      <div className="flex items-stretch gap-2" style={{ height: anyNegative ? plot + 60 : plot + 26 }}>
+        {months.map((m) => {
+          const negative = m.savings < 0
+          const h = Math.max(2, (Math.abs(m.savings) / peak) * plot)
+          return (
+            <div key={m.period} className="flex flex-col items-center" style={{ flex: '1 1 0', maxWidth: 68 }}
+              title={`${periodLabel(m.period)} · ${inrSigned(m.savings)}`}>
+              {/* above the baseline */}
+              <div className="flex w-full flex-col justify-end" style={{ height: plot }}>
+                {!negative && (
+                  <>
+                    <span className="tabular mb-1 text-center text-[10px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                      {inrShort(m.savings)}
+                    </span>
+                    <div className="w-full rounded-t" style={{ height: h, background: 'var(--status-good)' }} />
+                  </>
+                )}
+              </div>
+              <div className="h-px w-full" style={{ background: 'var(--border-strong)' }} />
+              {/* below the baseline */}
+              {anyNegative && (
+                <div className="flex w-full flex-col justify-start" style={{ height: 34 }}>
+                  {negative && (
+                    <>
+                      <div className="w-full rounded-b" style={{ height: Math.min(20, h), background: 'var(--status-critical)' }} />
+                      {/* A deficit month needs its figure as much as a surplus one — without it the
+                          bar below the line is an unexplained red stub. */}
+                      <span className="tabular mt-0.5 text-center text-[10px] font-semibold"
+                        style={{ color: 'var(--status-critical)' }}>
+                        {inrShort(m.savings)}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+              <span className="mt-1 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {MONTH_NAMES[Number(m.period.split('-')[1]) - 1]}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function MoneyTable({ head, children, note }) {
+  return (
+    <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--gridline)' }}>
+              {head.map((h, i) => (
+                <th key={h} className={`px-3 py-3 text-xs font-semibold uppercase tracking-wide ${i === 0 ? 'text-left' : 'text-right'}`}
+                  style={{ color: 'var(--text-muted)' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{children}</tbody>
+        </table>
+      </div>
+      {note && (
+        <p className="border-t px-3 py-2.5 text-xs" style={{ borderColor: 'var(--gridline)', color: 'var(--text-muted)' }}>{note}</p>
+      )}
+    </div>
+  )
+}
+
+function EmptyPanel({ children }) {
+  return (
+    <div className="rounded-xl border p-10 text-center" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      <p className="mx-auto max-w-sm text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{children}</p>
+    </div>
+  )
+}
+
+/**
+ * The expense tracker: one editable month, plus the year and year-on-year views over it.
+ *
+ * <p>Months are separate records rather than one rolling snapshot, so a change to this month never
+ * rewrites last month's history - which is the whole point of tracking. Recurring rows carry
+ * forward automatically, with loan tenures advanced, so a new month starts pre-filled rather than
+ * blank.
+ */
+function ExpensesView() {
+  const [tab, setTab] = useState('month')
+  const [period, setPeriod] = useState(thisPeriod)
+  const [month, setMonth] = useState(null)
+  const [history, setHistory] = useState([])
+  const [year, setYear] = useState(null)
+  const [yoy, setYoy] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [error, setError] = useState(null)
+  const [yearShown, setYearShown] = useState(new Date().getFullYear())
+
+  function loadMonth(p) {
+    setLoading(true)
+    return fetch(`/api/expenses/months/${p}`)
+      .then((r) => r.json())
+      .then((d) => { setMonth(d); setDirty(false); setError(null) })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
+  }
+
+  function loadHistory() {
+    return fetch('/api/expenses/months').then((r) => r.json()).then(setHistory).catch(() => {})
+  }
+
+  function loadSummaries(y) {
+    fetch(`/api/expenses/year?year=${y}`).then((r) => r.json()).then(setYear).catch(() => {})
+    fetch('/api/expenses/year-on-year').then((r) => r.json()).then(setYoy).catch(() => {})
+  }
+
+  useEffect(() => { loadMonth(period) }, [period])
+  useEffect(() => { loadHistory() }, [])
+  useEffect(() => { loadSummaries(yearShown) }, [yearShown])
+
+  async function save() {
+    if (!month) return
+    setSaving(true)
+    setError(null)
+    try {
+      const items = [
+        ...(month.loans ?? []).map((l) => ({ kind: 'LOAN', name: l.name, amount: Number(l.amount) || 0, remainingMonths: l.remainingMonths ?? null })),
+        ...(month.expenses ?? []).map((e) => ({ kind: 'EXPENSE', name: e.name, amount: Number(e.amount) || 0, remainingMonths: null })),
+      ]
+      const res = await fetch(`/api/expenses/months/${period}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ income: Number(month.income) || 0, items }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+      setMonth(body)
+      setDirty(false)
+      loadHistory()
+      loadSummaries(yearShown)
+    } catch (e) {
+      setError(e.message || 'Could not save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function edit(patch) {
+    setMonth((m) => ({ ...m, ...patch }))
+    setDirty(true)
+  }
+
+  // Totals are recomputed locally while editing so the figures move as you type; the server
+  // recomputes them the same way on save, so the two cannot disagree once persisted.
+  const loans = month?.loans ?? []
+  const expenses = month?.expenses ?? []
+  const totalEmi = loans.reduce((s, l) => s + (Number(l.amount) || 0), 0)
+  const totalExp = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+  const income = Number(month?.income) || 0
+  const surplus = income - totalEmi - totalExp
+
+  // Month-on-month is the comparison this whole feature exists to enable, so it belongs on the
+  // headline rather than only in the year table.
+  const previousSavings = useMemo(() => {
+    const prev = history.find((h) => h.period === shiftPeriod(period, -1))
+    return prev ? prev.savings : null
+  }, [history, period])
+
+  if (loading && !month) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16">
+        <div className="animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={30} /></div>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading your cashflow…</p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {[['month', 'This month'], ['year', 'Year'], ['yoy', 'Year on year']].map(([k, label]) => (
+          <FilterPill key={k} active={tab === k} onClick={() => setTab(k)}>{label}</FilterPill>
+        ))}
+      </div>
+
+      {tab === 'month' && (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <PeriodStepper
+              label={periodLabel(period)}
+              onPrev={() => setPeriod(shiftPeriod(period, -1))}
+              onNext={() => setPeriod(shiftPeriod(period, 1))}
+              onToday={() => setPeriod(thisPeriod())}
+              showToday={period !== thisPeriod()}
+            />
+            <div className="flex items-center gap-3">
+              {month && !month.saved && (
+                <span className="rounded px-2 py-1 text-xs font-medium"
+                  style={{ background: 'var(--gridline)', color: 'var(--text-secondary)' }}>
+                  {month.carriedFrom ? `Carried from ${periodLabel(month.carriedFrom)}` : 'Not recorded yet'}
+                </span>
+              )}
+              {month?.saved && !dirty && !saving && (
+                <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--status-good)' }}>
+                  <Dot color="var(--status-good)" size={6} /> Saved
+                </span>
+              )}
+              {(dirty || !month?.saved) && (
+                <button onClick={save} disabled={saving}
+                  className="rounded-lg px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-opacity disabled:opacity-50"
+                  style={{ background: 'var(--accent)' }}>
+                  {saving ? 'Saving…' : 'Save month'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {error && <p className="mb-3 text-sm" style={{ color: 'var(--status-serious)' }}>{error}</p>}
+
+          <CashflowHero
+            income={income} emi={totalEmi} expenses={totalExp} savings={surplus}
+            previousSavings={previousSavings}
+            onIncomeChange={(v) => edit({ income: v })}
+          />
+
+          <LoanForecast loans={loans} surplus={surplus} />
+
+          <div className="grid gap-0 lg:grid-cols-2 lg:gap-4">
+            <Ledger
+              title="Loan EMIs" accent={ALLOCATION.emi.color} showTenure
+              hint="The small box is months left before that EMI ends"
+              items={loans} income={income} total={totalEmi}
+              onChange={(i, next) => edit({ loans: loans.map((x, j) => (j === i ? next : x)) })}
+              onRemove={(i) => edit({ loans: loans.filter((_, j) => j !== i) })}
+              onAdd={() => edit({ loans: [...loans, { name: 'New loan', amount: 0, remainingMonths: 12 }] })}
+            />
+            <Ledger
+              title="Fixed expenses" accent={ALLOCATION.expenses.color}
+              items={expenses} income={income} total={totalExp}
+              onChange={(i, next) => edit({ expenses: expenses.map((x, j) => (j === i ? next : x)) })}
+              onRemove={(i) => edit({ expenses: expenses.filter((_, j) => j !== i) })}
+              onAdd={() => edit({ expenses: [...expenses, { name: 'New expense', amount: 0 }] })}
+            />
+          </div>
+        </>
+      )}
+
+      {tab === 'year' && year && (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <PeriodStepper
+              label={String(yearShown)} width="4rem"
+              onPrev={() => setYearShown(yearShown - 1)}
+              onNext={() => setYearShown(yearShown + 1)}
+              onToday={() => setYearShown(new Date().getFullYear())}
+              showToday={yearShown !== new Date().getFullYear()}
+            />
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {year.monthsRecorded} of 12 months recorded
+            </span>
+          </div>
+
+          <MetricStrip>
+            <Metric label={`Saved in ${yearShown}`} value={inrSigned(year.totalSavings)}
+              color={year.totalSavings < 0 ? 'var(--status-critical)' : 'var(--status-good)'}
+              sub={Number.isNaN(year.savingsRatePct) ? null : `${Math.round(year.savingsRatePct)}% of income`} />
+            <Metric label="Income" value={inr(year.totalIncome)} />
+            <Metric label="Loan EMIs" value={inr(year.totalEmi)} color={ALLOCATION.emi.color} />
+            <Metric label="Fixed expenses" value={inr(year.totalExpenses)} color={ALLOCATION.expenses.color} />
+            <Metric label="Average / month" value={inrSigned(year.averageMonthlySavings)} />
+          </MetricStrip>
+
+          {year.monthsRecorded > 0 ? (
+            <>
+              <div className="mb-4 rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+                <h3 className="mb-3 text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  Saved each month
+                </h3>
+                <YearChart months={year.months} />
+              </div>
+              <MoneyTable head={['Month', 'Income', 'EMIs', 'Expenses', 'Saved', 'Rate']}>
+                {year.months.map((m) => (
+                  <tr key={m.period} style={{ borderTop: '1px solid var(--gridline)' }}>
+                    <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text-primary)' }}>{periodLabel(m.period)}</td>
+                    <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--text-secondary)' }}>{inr(m.income)}</td>
+                    <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--text-secondary)' }}>{inr(m.totalEmi)}</td>
+                    <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--text-secondary)' }}>{inr(m.totalExpenses)}</td>
+                    <td className="tabular px-3 py-2.5 text-right font-semibold"
+                      style={{ color: m.savings < 0 ? 'var(--status-critical)' : 'var(--status-good)' }}>{inrSigned(m.savings)}</td>
+                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {Number.isNaN(m.savingsRatePct) || m.savingsRatePct == null ? '—' : `${Math.round(m.savingsRatePct)}%`}
+                    </td>
+                  </tr>
+                ))}
+              </MoneyTable>
+            </>
+          ) : (
+            <EmptyPanel>
+              Nothing recorded for {yearShown} yet. Save a month on the This month tab and it will appear here.
+            </EmptyPanel>
+          )}
+        </>
+      )}
+
+      {tab === 'yoy' && yoy && (
+        <>
+          <MetricStrip>
+            <Metric label="Saved all time" value={inrSigned(yoy.lifetimeSavings)}
+              color={yoy.lifetimeSavings < 0 ? 'var(--status-critical)' : 'var(--status-good)'} />
+            <Metric label="Years tracked" value={yoy.years.length} />
+            <Metric label="Best year"
+              value={yoy.years.length ? inrSigned(Math.max(...yoy.years.map((y) => y.totalSavings))) : '—'}
+              sub={yoy.years.length
+                ? String(yoy.years.reduce((a, b) => (b.totalSavings > a.totalSavings ? b : a)).year)
+                : null} />
+          </MetricStrip>
+
+          {yoy.years.length === 0 ? (
+            <EmptyPanel>No years tracked yet. Save your first month to start the record.</EmptyPanel>
+          ) : (
+            <MoneyTable
+              head={['Year', 'Months', 'Income', 'Committed', 'Saved', 'Rate', 'vs prev year']}
+              note="A year marked partial has fewer than twelve recorded months, so its total is not a like-for-like comparison against a complete one."
+            >
+              {[...yoy.years].reverse().map((y) => (
+                <tr key={y.year} style={{ borderTop: '1px solid var(--gridline)' }}>
+                  <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {y.year}
+                    {!y.complete && (
+                      <span className="ml-1.5 rounded px-1 py-0.5 text-[10px] font-medium"
+                        style={{ background: 'var(--gridline)', color: 'var(--text-muted)' }}>partial</span>
+                    )}
+                  </td>
+                  <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-muted)' }}>{y.monthsRecorded}</td>
+                  <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--text-secondary)' }}>{inr(y.totalIncome)}</td>
+                  <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--text-secondary)' }}>{inr(y.totalCommitted)}</td>
+                  <td className="tabular px-3 py-2.5 text-right font-semibold"
+                    style={{ color: y.totalSavings < 0 ? 'var(--status-critical)' : 'var(--status-good)' }}>{inrSigned(y.totalSavings)}</td>
+                  <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {Number.isNaN(y.savingsRatePct) || y.savingsRatePct == null ? '—' : `${Math.round(y.savingsRatePct)}%`}
+                  </td>
+                  <td className="tabular px-3 py-2.5 text-right text-xs"
+                    style={{ color: y.changeVsPreviousYear == null ? 'var(--text-muted)' : y.changeVsPreviousYear >= 0 ? 'var(--status-good)' : 'var(--status-critical)' }}>
+                    {y.changeVsPreviousYear == null ? '—' : (y.changeVsPreviousYear >= 0 ? '▲ ' : '▼ ') + inr(Math.abs(y.changeVsPreviousYear)).slice(1)}
+                  </td>
+                </tr>
+              ))}
+            </MoneyTable>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
+/**
+ * The in-place empty state for a view whose scan has not produced anything yet.
+ *
+ * <p>Used by Reversal Watch, whose signals only exist once its scan has run. It sits
+ * inside the normal shell rather than replacing the page, so the tab row stays usable while a scan
+ * runs - the old behaviour took over the whole screen and made the rest of the app unreachable.
+ */
+function ScanPending({ scanning, progress, error, onScan, what, description, queued, queuedBehind }) {
+  return (
+    <div
+      className="mx-auto max-w-md rounded-2xl border p-8 text-center"
+      style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', boxShadow: 'var(--shadow-md)' }}
+    >
+      {queued && !scanning ? (
+        <>
+          <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
+          <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Queued</p>
+          <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            Waiting for the {queuedBehind} to finish, then this starts automatically. They share the
+            same fetched bars, so running them one after the other is far faster than at once.
+          </p>
+        </>
+      ) : scanning ? (
+        <>
+          <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
+          <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Scanning the Nifty 500…</p>
+          <p className="tabular mx-auto mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>{progress ?? 'Starting…'}</p>
+          <p className="mx-auto mt-3 max-w-xs text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            The first run of a session fetches around 500 symbols. You can switch tabs while it
+            finishes — it keeps going in the background.
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="mx-auto w-fit"><LogoBadge size={48} /></div>
+          <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {error ? `Could not run the ${what} scan` : `${what} has not run yet`}
+          </p>
+          <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            {error ?? description}
+          </p>
+          <button
+            onClick={onScan}
+            className="mt-6 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            style={{ background: 'var(--accent)' }}
+          >
+            {error ? 'Try again' : 'Run the scan'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** Segmented strength meter — reads at a glance in a way a bare "1/10" does not. */
+function RegimeMeter({ score, maxScore, color }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex gap-[3px]">
+        {Array.from({ length: maxScore }, (_, i) => (
+          <span
+            key={i}
+            className="h-4 w-1.5 rounded-full"
+            style={{ background: i < score ? color : 'var(--gridline)' }}
+          />
+        ))}
+      </div>
+      <span className="tabular text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+        {score}/{maxScore}
+      </span>
+    </div>
+  )
+}
+
+/** Price against one moving average, as a compact above/below chip. */
+function EmaChip({ label, above }) {
+  return (
+    <span
+      className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+      style={{
+        background: above ? 'rgba(12, 163, 12, 0.12)' : 'rgba(208, 59, 59, 0.12)',
+        color: above ? 'var(--status-good)' : 'var(--status-critical)',
+      }}
+    >
+      {above ? '▲' : '▼'} {label}
+    </span>
+  )
+}
+
+function ReturnCell({ label, pct }) {
+  const known = pct != null && !Number.isNaN(pct)
+  const color = !known ? 'var(--text-muted)' : pct >= 0 ? 'var(--status-good)' : 'var(--status-critical)'
+  return (
+    <div>
+      <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </div>
+      <div className="tabular text-sm font-semibold" style={{ color }}>
+        {known ? `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : '—'}
+      </div>
+    </div>
+  )
+}
+
+/** One benchmark index: where it trades relative to its own averages, and how it has moved. */
+function IndexPanel({ index }) {
+  if (!index?.known) {
+    return (
+      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--gridline)' }}>
+        <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{index?.name ?? 'Index'}</div>
+        <div className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>No data</div>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-lg border p-3" style={{ borderColor: 'var(--gridline)', background: 'var(--page-plane)' }}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{index.name}</span>
+        <span className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {fmtPrice(index.price)}
+        </span>
+      </div>
+      <div className="mt-2.5 flex gap-4">
+        <ReturnCell label="1M" pct={index.return1mPct} />
+        <ReturnCell label="3M" pct={index.return3mPct} />
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Structure
+          </div>
+          <div className="text-sm font-semibold" style={{
+            color: index.structure === 'HH+HL' ? 'var(--status-good)'
+              : index.structure === 'LH+LL' ? 'var(--status-critical)' : 'var(--text-secondary)',
+          }}>
+            {index.structure}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-1">
+        <EmaChip label="20 EMA" above={index.price > index.ema20} />
+        <EmaChip label="50 EMA" above={index.price > index.ema50} />
+        <EmaChip label="200 EMA" above={index.price > index.ema200} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The market-condition panel that leads the dashboard.
+ *
+ * <p>It is the one thing the app can answer before any scan has run, so it gets the space: the
+ * regime verdict, the meter behind it, and both benchmark indices broken out. Showing the two
+ * separately matters because they disagree in a way that is worth seeing — a market carried by ten
+ * large caps scores well on the Nifty 50 and badly on the Nifty 500.
+ */
+function RegimeHero({ regime, error }) {
+  if (!regime) {
+    return (
+      <div className="mb-5 rounded-xl border px-5 py-6"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+        <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+          Market regime
+        </div>
+        <div className="mt-1.5 text-sm" style={{ color: error ? 'var(--status-serious)' : 'var(--text-muted)' }}>
+          {error ? `Unavailable: ${error}` : 'Reading the index data…'}
+        </div>
+      </div>
+    )
+  }
+
+  const meta = REGIME_META[regime.regime] ?? { color: 'var(--text-muted)', label: regime.regime }
+  return (
+    <div
+      className="mb-5 overflow-hidden rounded-xl border"
+      style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', boxShadow: 'var(--shadow-md)' }}
+    >
+      <div className="h-1 w-full" style={{ background: meta.color }} />
+      <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <div>
+          <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Market regime
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-3">
+            <span className="text-3xl font-semibold tracking-tight" style={{ color: meta.color }}>
+              {meta.label}
+            </span>
+            <RegimeMeter score={regime.score} maxScore={regime.maxScore} color={meta.color} />
+          </div>
+          <p className="mt-3 max-w-md text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            {regime.summary}
+          </p>
+          {!regime.allowsBuyNow && (
+            <div
+              className="mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold"
+              style={{ background: 'rgba(208, 59, 59, 0.1)', color: 'var(--status-critical)' }}
+            >
+              <Dot color="var(--status-critical)" size={7} />
+              No entries are called while the market is bearish
+            </div>
+          )}
+        </div>
+        {/* self-start so the index panels size to their own content rather than stretching to
+            match the summary column, which leaves a block of empty card under them. */}
+        <div className="grid gap-3 self-start sm:grid-cols-2">
+          <IndexPanel index={regime.nifty50} />
+          <IndexPanel index={regime.nifty500} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Status pill on a feature card: never run / running / ready. */
+function CardStatus({ state, detail }) {
+  const meta = state === 'running'
+    ? { color: 'var(--status-warning)', label: 'Scanning' }
+    : state === 'ready'
+      ? { color: 'var(--status-good)', label: 'Ready' }
+      : { color: 'var(--text-muted)', label: 'Not run yet' }
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold" style={{ color: meta.color }}>
+      {state === 'running'
+        ? <span className="inline-block animate-spin" style={{ color: meta.color }}>&#8635;</span>
+        : <Dot color={meta.color} size={7} />}
+      {detail ?? meta.label}
+    </span>
+  )
+}
+
+/**
+ * One feature on the dashboard. Clicking it opens that tab, which is also what starts its scan —
+ * so the card is the affordance for "go look at this", not a second place to trigger work.
+ */
+function FeatureCard({ title, description, state, detail, metrics, accent, onOpen }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onOpen}
+      className="group flex w-full flex-col overflow-hidden rounded-xl border text-left transition-all"
+      style={{
+        borderColor: hover ? 'var(--border-strong)' : 'var(--border)',
+        background: 'var(--surface-1)',
+        boxShadow: hover ? 'var(--shadow-md)' : 'none',
+        transform: hover ? 'translateY(-1px)' : 'none',
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div className="h-0.5 w-full" style={{ background: state === 'idle' ? 'var(--gridline)' : accent }} />
+      <div className="flex flex-1 flex-col gap-2.5 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</span>
+          <CardStatus state={state} detail={detail} />
+        </div>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{description}</p>
+
+        <div className="mt-auto flex items-end justify-between gap-3 pt-1">
+          {metrics && metrics.length > 0 ? (
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {metrics.map((m) => (
+                <div key={m.label}>
+                  <div className="tabular text-xl font-semibold leading-none" style={{ color: m.color ?? 'var(--text-primary)' }}>
+                    {m.value}
+                  </div>
+                  <div className="mt-1 text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                    {m.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : <span />}
+          <span
+            className="shrink-0 text-xs font-semibold transition-opacity"
+            style={{ color: 'var(--accent)', opacity: hover ? 1 : 0.55 }}
+          >
+            Open →
+          </span>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+/**
+ * The highest-ranked setups, inline.
+ *
+ * <p>A dashboard made purely of navigation cards makes the user click through to learn anything.
+ * Once the ranking exists, its top rows are the single most useful thing the app can show, so they
+ * belong on the landing page rather than one tab away.
+ */
+function TopSetups({ stocks, onOpen }) {
+  const top = stocks.slice(0, 5)
+  if (top.length === 0) return null
+  return (
+    <div className="mb-5 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-3" style={{ borderColor: 'var(--gridline)' }}>
+        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+          Top-ranked setups
+        </span>
+        <button onClick={onOpen} className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>
+          See all →
+        </button>
+      </div>
+      <div className="divide-y" style={{ borderColor: 'var(--gridline)' }}>
+        {top.map((s) => {
+          const meta = BULLISH_STATUS_META[s.tradeStatus] ?? { color: 'var(--text-muted)', label: s.tradeStatus }
+          return (
+            <button
+              key={s.symbol}
+              onClick={onOpen}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors"
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <span className="tabular w-5 shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>{s.rank}</span>
+              <span
+                className="tabular w-10 shrink-0 rounded px-1.5 py-0.5 text-center text-xs font-semibold"
+                style={{ background: 'var(--accent-wash)', color: 'var(--accent)' }}
+              >
+                {Math.round(s.score)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {s.name ?? s.symbol}
+                </span>
+                <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {s.pattern.name}{s.sector ? ` · ${s.sector}` : ''}
+                </span>
+              </span>
+              <span className="hidden shrink-0 text-xs sm:block" style={{ color: 'var(--text-secondary)' }}>
+                {s.trend.label}
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold" style={{ color: meta.color }}>
+                <Dot color={meta.color} size={6} />
+                <span className="hidden md:inline">{meta.label}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The landing view.
+ *
+ * <p>It deliberately does not require a scan. The market regime comes from two index series the
+ * server warms at startup, so the dashboard can answer "what is the market doing" the instant the
+ * app opens; everything else reports whether its scan has run and what it found, and opening a tab
+ * is what starts that scan. The previous behaviour — a full-screen "No scan data yet" wall in front
+ * of the entire app — made the first five minutes of every cold start show nothing at all.
+ */
+function DashboardView({ reversal, bullish, intraday, watchlistCount, onOpen }) {
+  const [regime, setRegime] = useState(null)
+  const [regimeError, setRegimeError] = useState(null)
+  const [money, setMoney] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/market-regime')
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((d) => { if (!cancelled) setRegime(d) })
+      .catch((e) => { if (!cancelled) setRegimeError(e.message) })
+
+    // Cheap and always available — no scan stands behind it, so the card is useful on a cold start.
+    fetch('/api/expenses/overview')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) setMoney(d) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  const reversals = reversal.data?.reversals?.length ?? 0
+
+  const reversalState = reversal.scanning ? 'running' : reversal.data ? 'ready' : 'idle'
+  const bullishState = bullish.scanning ? 'running' : bullish.data ? 'ready' : 'idle'
+
+  return (
+    <>
+      <RegimeHero regime={regime} error={regimeError} />
+
+      {bullish.data && <TopSetups stocks={bullish.data.stocks ?? []} onOpen={() => onOpen('bullish')} />}
+
+      {money && (money.currentMonth || money.latestMonth) && (() => {
+        const m = money.currentMonth ?? money.latestMonth
+        const y = money.thisYear
+        const short = m.savings < 0
+        return (
+          <button
+            onClick={() => onOpen('expenses')}
+            className="mb-5 flex w-full flex-col gap-4 overflow-hidden rounded-xl border p-5 text-left transition-colors sm:flex-row sm:items-center sm:justify-between"
+            style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--border-strong)')}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
+          >
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                {short ? 'Short in' : 'Saved in'} {periodLabel(m.period)}
+                {!money.currentMonthRecorded && (
+                  <span className="ml-1.5 normal-case" style={{ color: 'var(--text-muted)' }}>
+                    · {periodLabel(money.currentPeriod)} not recorded yet
+                  </span>
+                )}
+              </div>
+              <div className="tabular mt-1 text-3xl font-semibold tracking-tight"
+                style={{ color: short ? 'var(--status-critical)' : 'var(--status-good)' }}>
+                {inrSigned(m.savings)}
+              </div>
+              <div className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                {inr(m.income)} in · {inr(m.committed)} committed
+                {Number.isNaN(m.savingsRatePct) ? '' : ` · ${Math.round(m.savingsRatePct)}% saved`}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-6 border-t pt-4 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0"
+              style={{ borderColor: 'var(--gridline)' }}>
+              <div>
+                <div className="tabular text-xl font-semibold" style={{ color: y.totalSavings < 0 ? 'var(--status-critical)' : 'var(--status-good)' }}>
+                  {inrSigned(y.totalSavings)}
+                </div>
+                <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  Saved in {y.year}
+                </div>
+              </div>
+              <div>
+                <div className="tabular text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {inr(y.totalCommitted)}
+                </div>
+                <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  Spent in {y.year}
+                </div>
+              </div>
+              <div>
+                <div className="tabular text-xl font-semibold" style={{ color: 'var(--accent)' }}>
+                  {inrSigned(money.yearOnYear?.lifetimeSavings ?? 0)}
+                </div>
+                <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  All time · {money.monthsTracked} mo
+                </div>
+              </div>
+            </div>
+          </button>
+        )
+      })()}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <FeatureCard
+          title="Bullish Stocks"
+          description="Ranks the Nifty 500 out of 100 on trend, relative strength, momentum, volume, structure, pattern, breakout quality and risk/reward."
+          state={bullishState}
+          accent="var(--status-good)"
+          detail={bullish.scanning ? (bullish.progress ?? 'Ranking') : undefined}
+          metrics={bullish.data ? [
+            { label: 'Bullish', value: bullish.data.bullishStockCount, color: 'var(--accent)' },
+            { label: 'A+', value: bullish.data.aPlusCount, color: 'var(--status-good)' },
+            { label: 'Buy now', value: bullish.data.buyNowCount, color: 'var(--status-good)' },
+          ] : null}
+          onOpen={() => onOpen('bullish')}
+        />
+
+        <FeatureCard
+          title="Intraday Scanner"
+          description="Two strategies over the same intraday candles: bullish continuation above EMA and VWAP, and overbought reversals rejecting a rally."
+          state={intraday.scanning ? 'running' : intraday.data ? 'ready' : 'idle'}
+          accent="var(--cat-nifty500)"
+          detail={intraday.scanning ? (intraday.progress ?? 'Scanning') : undefined}
+          metrics={intraday.data ? [
+            { label: 'Bullish', value: intraday.data.bullishCount, color: 'var(--status-good)' },
+            { label: 'Reversal', value: intraday.data.reversalCount, color: 'var(--status-critical)' },
+          ] : null}
+          onOpen={() => onOpen('intraday')}
+        />
+
+        <FeatureCard
+          title="Reversal Watch"
+          description="Scans the Nifty 500 for candlestick-confirmed reversal setups in beaten-down names — a bearish 12-month context, a reversal pattern, and a confirmed close above it."
+          state={reversalState}
+          accent="var(--status-warning)"
+          detail={reversal.scanning ? (reversal.progress ?? 'Scanning') : undefined}
+          metrics={reversal.data ? [
+            { label: 'Confirmed signals', value: reversals, color: reversals > 0 ? 'var(--status-good)' : undefined },
+          ] : null}
+          onOpen={() => onOpen('reversal')}
+        />
+
+        <FeatureCard
+          title="My Watchlist"
+          description="Symbols you follow, scored live by the bullish engine on every load — including names outside the index."
+          state={watchlistCount > 0 ? 'ready' : 'idle'}
+          accent="var(--cat-custom)"
+          detail={watchlistCount > 0 ? `${watchlistCount} followed` : 'Empty'}
+          metrics={watchlistCount > 0 ? [{ label: 'Followed', value: watchlistCount }] : null}
+          onOpen={() => onOpen('lookup')}
+        />
+
+        <FeatureCard
+          title="Expenses"
+          description="Salary, loan EMIs and fixed costs tracked month by month, with a forecast of the cash each EMI hands back when it ends."
+          state={money && money.monthsTracked > 0 ? 'ready' : 'idle'}
+          accent="var(--cat-next50)"
+          detail={money && money.monthsTracked > 0 ? `${money.monthsTracked} month${money.monthsTracked === 1 ? '' : 's'}` : 'Nothing tracked'}
+          metrics={money && money.thisYear ? [
+            { label: `Saved ${money.thisYear.year}`, value: inrSigned(money.thisYear.totalSavings),
+              color: money.thisYear.totalSavings < 0 ? 'var(--status-critical)' : 'var(--status-good)' },
+          ] : null}
+          onOpen={() => onOpen('expenses')}
+        />
+
+        <FeatureCard
+          title="Trade Journal"
+          description="Your delivery and swing trade log, an auto-calculated performance dashboard, and a 1:2 risk/reward calculator."
+          state="ready"
+          accent="var(--cat-next50)"
+          detail="Always available"
+          metrics={null}
+          onOpen={() => onOpen('journal')}
+        />
+      </div>
+    </>
+  )
+}
+
+const VIEW_TITLES = {
+  dashboard: 'Dashboard',
+  bullish: 'Bullish Stocks',
+  intraday: 'Intraday Scanner',
+  reversal: 'Reversal Watch',
+  lookup: 'My Watchlist',
+  journal: 'Trade Journal',
+  expenses: 'Expenses',
+}
+
+const VIEW_SUBTITLES = {
+  dashboard: 'Market regime, and where each scanner stands. Opening a tab starts its scan.',
+  intraday: 'Two strategies over the same intraday candles — bullish continuation, and overbought reversal.',
+  reversal: 'Candlestick-confirmed reversal setups in beaten-down Nifty 500 names.',
+  lookup: 'Symbols you follow, scored by the same 100-point bullish assessment as the ranked table.',
+  bullish: 'Nifty 500 ranked on trend, relative strength, momentum, volume, price structure, pattern quality, breakout quality and risk/reward.',
+  journal: 'Your delivery/swing trade log, auto-calculated performance dashboard, and 1:2 R:R calculator.',
+  expenses: 'Salary, EMIs and fixed costs month by month — and what that adds up to over a year.',
+}
+
 export default function App() {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
-  const [view, setView] = useState('breakout')
-  const [decision, setDecision] = useState('ALL')
-  const [universe, setUniverse] = useState('ALL')
-  const [query, setQuery] = useState('')
+  const [view, setView] = useState('dashboard')
   const [expanded, setExpanded] = useState(null)
-  const [sortDesc, setSortDesc] = useState(true)
+  const [watchlistChartRow, setWatchlistChartRow] = useState(null)
 
   const [customRows, setCustomRows] = useState([])
   const [customInput, setCustomInput] = useState('')
@@ -2040,10 +3555,35 @@ export default function App() {
   const [refreshError, setRefreshError] = useState(null)
   const pollRef = useRef(null)
 
+  // The bullish ranking lives here rather than inside its tab: the dashboard reports on it, and
+  // opening the tab is what starts it, so the state has to outlive the tab being mounted.
+  const [bullishData, setBullishData] = useState(null)
+  const [bullishError, setBullishError] = useState(null)
+  const [bullishScanning, setBullishScanning] = useState(false)
+  const [bullishProgress, setBullishProgress] = useState(null)
+  const [bullishScanError, setBullishScanError] = useState(null)
+  const bullishPollRef = useRef(null)
+
+  // The intraday scan runs on a different candle series from the two daily scans, so it keeps its
+  // own state and cannot reuse their cached bars.
+  const [intradayData, setIntradayData] = useState(null)
+  const [intradayError, setIntradayError] = useState(null)
+  const [intradayScanning, setIntradayScanning] = useState(false)
+  const [intradayProgress, setIntradayProgress] = useState(null)
+  const [intradayScanError, setIntradayScanError] = useState(null)
+  const [intradayInterval, setIntradayInterval] = useState('15m')
+  const intradayPollRef = useRef(null)
+
+  // One auto-start per feature per session. Without this a scan that fails would be retried on
+  // every re-render that lands on its tab, which is a request loop rather than a retry.
+  const autoStarted = useRef({ reversal: false, bullish: false, intraday: false })
+
   function loadResults() {
     return fetch('/api/results')
       .then((r) => {
-        if (!r.ok) throw new Error('no scan results yet')
+        // 404 is the ordinary cold-start case, not a failure: the scan simply has not run.
+        if (r.status === 404) throw new Error('no-results-yet')
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json()
       })
       .then((d) => {
@@ -2052,10 +3592,118 @@ export default function App() {
       })
   }
 
+  /** A real load failure, as opposed to "no scan has run yet". */
+  const loadFailure = error && error !== 'no-results-yet' ? error : null
+
   useEffect(() => {
     loadResults().catch((e) => setError(e.message))
     return () => clearInterval(pollRef.current)
   }, [])
+
+  function loadBullish() {
+    return fetch('/api/bullish-stocks')
+      .then((r) => {
+        if (r.status === 404) throw new Error('no-ranking-yet')
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((d) => { setBullishData(d); setBullishError(null) })
+  }
+
+  useEffect(() => {
+    loadBullish().catch((e) => setBullishError(e.message))
+    return () => clearInterval(bullishPollRef.current)
+  }, [])
+
+  async function runBullishScan() {
+    if (bullishScanning) return
+    setBullishScanError(null)
+    setBullishScanning(true)
+    setBullishProgress('Starting ranking…')
+    try {
+      const res = await fetch('/api/bullish-stocks/scan', { method: 'POST' })
+      if (res.status !== 202 && res.status !== 409) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      bullishPollRef.current = setInterval(async () => {
+        try {
+          const st = await fetch('/api/bullish-stocks/status').then((r) => r.json())
+          if (st.running) {
+            setBullishProgress(st.progress ?? 'Ranking…')
+            return
+          }
+          clearInterval(bullishPollRef.current)
+          if (st.lastResult?.error) setBullishScanError(st.lastResult.error)
+          else await loadBullish().catch((e) => setBullishError(e.message))
+          setBullishScanning(false)
+          setBullishProgress(null)
+        } catch (e) {
+          clearInterval(bullishPollRef.current)
+          setBullishScanning(false)
+          setBullishProgress(null)
+          setBullishScanError(e.message || 'Lost connection to the API server')
+        }
+      }, 1500)
+    } catch (e) {
+      setBullishScanning(false)
+      setBullishProgress(null)
+      setBullishScanError(e.message || 'Could not reach the API server')
+    }
+  }
+
+  function loadIntraday() {
+    return fetch('/api/intraday')
+      .then((r) => {
+        if (r.status === 404) throw new Error('no-intraday-yet')
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((d) => { setIntradayData(d); setIntradayError(null); setIntradayInterval(d.interval ?? '15m') })
+  }
+
+  useEffect(() => {
+    loadIntraday().catch((e) => setIntradayError(e.message))
+    return () => clearInterval(intradayPollRef.current)
+  }, [])
+
+  async function runIntradayScan(interval) {
+    if (intradayScanning) return
+    setIntradayScanError(null)
+    setIntradayScanning(true)
+    setIntradayProgress('Starting intraday scan…')
+    try {
+      const res = await fetch(`/api/intraday/scan?interval=${encodeURIComponent(interval ?? intradayInterval)}`,
+        { method: 'POST' })
+      if (res.status !== 202 && res.status !== 409) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      intradayPollRef.current = setInterval(async () => {
+        try {
+          const st = await fetch('/api/intraday/status').then((r) => r.json())
+          if (st.running) {
+            setIntradayProgress(st.progress ?? 'Scanning…')
+            return
+          }
+          clearInterval(intradayPollRef.current)
+          if (st.lastResult?.error) setIntradayScanError(st.lastResult.error)
+          else await loadIntraday().catch((e) => setIntradayError(e.message))
+          setIntradayScanning(false)
+          setIntradayProgress(null)
+        } catch (e) {
+          clearInterval(intradayPollRef.current)
+          setIntradayScanning(false)
+          setIntradayProgress(null)
+          setIntradayScanError(e.message || 'Lost connection to the API server')
+        }
+      }, 1500)
+    } catch (e) {
+      setIntradayScanning(false)
+      setIntradayProgress(null)
+      setIntradayScanError(e.message || 'Could not reach the API server')
+    }
+  }
 
   async function refreshAll() {
     if (refreshing) return
@@ -2110,7 +3758,7 @@ export default function App() {
     setCustomLoading(!silent)
     setCustomError(null)
     try {
-      const res = await fetch(`/api/analyze?symbol=${encodeURIComponent(symbol)}`)
+      const res = await fetch(`/api/bullish-stocks/${encodeURIComponent(symbol)}`)
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       setCustomRows((prev) => [body, ...prev.filter((r) => r.symbol !== body.symbol)])
@@ -2128,144 +3776,68 @@ export default function App() {
     forgetSymbol(symbol)
   }
 
-  const allRows = useMemo(() => {
-    const base = data?.results ?? []
-    return [...customRows, ...base]
-  }, [data, customRows])
+  // Opening a tab is what starts its scan. The dashboard deliberately starts nothing: it is the
+  // landing view, and a page load should not kick off several minutes of fetching on its own.
+  // Reversal Watch owns the scan behind /api/results, so opening it is what starts that scan.
+  useEffect(() => {
+    // Never auto-start one scan while the other is running. Both walk the same ~500 symbols, so
+    // running them at once doubles the load on Yahoo's endpoint for no gain — whereas waiting
+    // costs nothing, because the first scan fills the shared bar cache and the second then
+    // completes in seconds. These flags are effect dependencies, so the queued scan starts on its
+    // own the moment the running one finishes.
+    const busy = refreshing || bullishScanning || intradayScanning
 
-  const rows = useMemo(() => {
-    let r = allRows
-    if (decision !== 'ALL') r = r.filter((row) => decisionOf(row.classification) === decision)
-    if (universe !== 'ALL') r = r.filter((row) => (row.universe ?? 'NIFTY_50') === universe)
-    if (query.trim()) {
-      const q = query.trim().toUpperCase()
-      r = r.filter(
-        (row) => row.symbol.toUpperCase().includes(q) || (row.name ?? '').toUpperCase().includes(q)
-      )
+    if (view === 'reversal' && !data && !busy && !autoStarted.current.reversal) {
+      autoStarted.current.reversal = true
+      refreshAll()
     }
-    return [...r].sort((a, b) => {
-      const diff = sortDesc ? b.setupScore - a.setupScore : a.setupScore - b.setupScore
-      return diff !== 0 ? diff : (sortDesc ? b.entryScore - a.entryScore : a.entryScore - b.entryScore)
-    })
-  }, [allRows, decision, universe, query, sortDesc])
+    if (view === 'bullish' && !bullishData && !busy && !autoStarted.current.bullish) {
+      autoStarted.current.bullish = true
+      runBullishScan()
+    }
+    if (view === 'intraday' && !intradayData && !busy && !autoStarted.current.intraday) {
+      autoStarted.current.intraday = true
+      runIntradayScan(intradayInterval)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, data, bullishData, intradayData, refreshing, bullishScanning, intradayScanning])
 
-  const counts = useMemo(
-    () =>
-      allRows.reduce((acc, r) => {
-        const d = decisionOf(r.classification)
-        acc[d] = (acc[d] ?? 0) + 1
-        return acc
-      }, {}),
-    [allRows]
-  )
-
-  if (view === 'journal' && (error || !data)) {
-    return (
-      <div className="min-h-screen" style={{ background: 'var(--page-plane)' }}>
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-          <header className="mb-6">
-            <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-              Trade Journal
-            </h1>
-            <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
-              Your delivery/swing trade log, auto-calculated performance dashboard, and 1:2 R:R calculator.
-            </p>
-            <div className="mt-3">
-              <ViewTabs view={view} setView={setView} reversalCount={data?.reversals?.length ?? 0}
-                watchlistCount={customRows.length} />
-            </div>
-          </header>
-          <TradeJournalView />
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div
-        className="flex min-h-screen flex-col items-center justify-center gap-8 p-6"
-        style={{
-          background:
-            'radial-gradient(ellipse 800px 500px at 50% 20%, var(--accent-wash), transparent), var(--page-plane)',
-        }}
-      >
-        <div className="flex items-center gap-2.5">
-          <LogoBadge size={32} />
-          <span className="text-lg font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-            Breakout Scanner
-          </span>
-        </div>
-
-        <div
-          className="w-full max-w-md rounded-2xl border p-8 text-center"
-          style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', boxShadow: 'var(--shadow-md)' }}
-        >
-          <div className="mx-auto w-fit">
-            <LogoBadge size={56} />
-          </div>
-          <p className="mt-5 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>No scan data yet</p>
-          <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            Run your first scan to screen the full universe against a 10-point breakout checklist.
-          </p>
-
-          <button
-            onClick={refreshAll}
-            disabled={refreshing}
-            className="mt-6 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
-            style={{ background: 'var(--accent)' }}
-          >
-            {refreshing && <span className="inline-block animate-spin">&#8635;</span>}
-            {refreshing ? refreshProgress ?? 'Scanning…' : 'Run first scan'}
-          </button>
-
-          {refreshError && <p className="mt-3 text-sm" style={{ color: 'var(--status-serious)' }}>{refreshError}</p>}
-
-          <div className="mt-7 grid grid-cols-3 gap-3 border-t pt-6" style={{ borderColor: 'var(--gridline)' }}>
-            <MiniStat label="Universe" value="Nifty 500" />
-            <MiniStat label="Checklist" value="10-point" />
-            <MiniStat label="Data" value="Live NSE" />
-          </div>
-
-          <div className="mt-5 border-t pt-5" style={{ borderColor: 'var(--gridline)' }}>
-            <ViewTabs view={view} setView={setView} reversalCount={0} />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!data) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4" style={{ background: 'var(--page-plane)' }}>
-        <div className="animate-pulse" style={{ color: 'var(--accent)' }}>
-          <Logo size={34} />
-        </div>
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading scan results…</p>
-        <ViewTabs view={view} setView={setView} reversalCount={0} />
-      </div>
-    )
-  }
+  // No full-screen gate any more. Every view renders inside the same shell and handles its own
+  // empty state, so the tab row, the header and the dashboard stay reachable at all times — the
+  // old "No scan data yet" wall hid the entire app behind a scan that had not been asked for.
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-plane)' }}>
+      {/* The brand used to live only on the "no scan data" screen, which no longer exists — so it
+          moves into a persistent bar rather than disappearing from the app altogether. */}
+      <div className="border-b" style={{ borderColor: 'var(--gridline)', background: 'var(--surface-1)' }}>
+        <div className="mx-auto flex max-w-6xl items-center gap-2.5 px-4 py-3 sm:px-6">
+          <LogoBadge size={28} />
+          <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+            Breakout Scanner
+          </span>
+          <span className="ml-auto text-xs" style={{ color: 'var(--text-muted)' }}>Nifty 500 · live NSE data</span>
+        </div>
+      </div>
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <header className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-              {view === 'reversal' ? 'Reversal Watch' : view === 'journal' ? 'Trade Journal' : 'Breakout Scanner'}
+              {VIEW_TITLES[view]}
             </h1>
             <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
-              {view === 'journal'
-                ? 'Your delivery/swing trade log, auto-calculated performance dashboard, and 1:2 R:R calculator.'
-                : <>Nifty 500 &middot; {data.universe} stocks scanned &middot; updated{' '}
-                    {new Date(data.generatedAt).toLocaleString()}</>}
+              {VIEW_SUBTITLES[view]}
             </p>
             <div className="mt-3">
-              <ViewTabs view={view} setView={setView} reversalCount={data.reversals?.length ?? 0}
-                watchlistCount={customRows.length} />
+              <ViewTabs view={view} setView={setView} reversalCount={data?.reversals?.length ?? 0}
+                watchlistCount={customRows.length} intradayCount={(intradayData ? (intradayData.bullishCount ?? 0) + (intradayData.reversalCount ?? 0) : 0)} />
             </div>
           </div>
+          {/* Only Reversal Watch is fed by this scan, so only it gets the button. The Bullish tab carries
+              its own Re-rank, and offering both would be two buttons that do different things.
+              Conditional rendering rather than the `hidden` attribute, which Tailwind's `flex`
+              utility would override. */}
+          {view === 'reversal' && (
           <div className="flex flex-col items-end gap-1.5">
             <button
               onClick={refreshAll}
@@ -2274,7 +3846,7 @@ export default function App() {
               style={{ borderColor: 'var(--btn-scan-border)', background: 'var(--btn-scan-bg)', color: 'var(--text-primary)' }}
             >
               <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>&#8635;</span>
-              {refreshing ? 'Scanning…' : 'Scan Stocks'}
+              {refreshing ? 'Scanning…' : 'Rescan'}
             </button>
             {refreshing && refreshProgress && (
               <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{refreshProgress}</span>
@@ -2283,17 +3855,10 @@ export default function App() {
               <span className="max-w-xs text-right text-xs" style={{ color: 'var(--status-serious)' }}>{refreshError}</span>
             )}
           </div>
+          )}
         </header>
 
-        {view === 'breakout' && (
-          <div className="mb-6 flex flex-wrap gap-3">
-            <StatTile label="Scanned" value={allRows.length} />
-            <StatTile label="Buy Now" value={counts['BUY NOW'] ?? 0} color="var(--status-good)" />
-            <StatTile label="Wait" value={counts.WAIT ?? 0} color="var(--status-warning)" />
-            <StatTile label="Reject" value={counts.REJECT ?? 0} color="var(--status-critical)" />
-          </div>
-        )}
-        {view === 'reversal' && (
+        {view === 'reversal' && data && (
           <div className="mb-6 flex flex-wrap gap-3">
             <StatTile label="Confirmed signals" value={data.reversals?.length ?? 0} color="var(--status-good)" />
           </div>
@@ -2302,9 +3867,9 @@ export default function App() {
           <div className="mb-6 flex flex-wrap gap-3">
             <StatTile label="Followed" value={customRows.length} />
             <StatTile label="Buy now" color="var(--status-good)"
-              value={customRows.filter((r) => decisionOf(r.classification) === 'BUY NOW').length} />
-            <StatTile label="Wait" color="var(--status-warning)"
-              value={customRows.filter((r) => decisionOf(r.classification) === 'WAIT').length} />
+              value={customRows.filter((r) => r.tradeStatus === 'BUY NOW').length} />
+            <StatTile label="Bullish" color="var(--accent)"
+              value={customRows.filter((r) => r.score >= 65).length} />
           </div>
         )}
 
@@ -2347,128 +3912,66 @@ export default function App() {
         </div>
         )}
 
+        {view === 'dashboard' && (
+          <DashboardView
+            reversal={{ data, scanning: refreshing, progress: refreshProgress }}
+            bullish={{ data: bullishData, scanning: bullishScanning, progress: bullishProgress }}
+            intraday={{ data: intradayData, scanning: intradayScanning, progress: intradayProgress }}
+            watchlistCount={customRows.length}
+            onOpen={setView}
+          />
+        )}
+
+        {view === 'intraday' && (
+          <IntradayView
+            data={intradayData}
+            scanning={intradayScanning}
+            progress={intradayProgress}
+            scanError={intradayScanError}
+            loadError={intradayError && intradayError !== 'no-intraday-yet' ? intradayError : null}
+            onScan={runIntradayScan}
+            queued={refreshing || bullishScanning}
+            interval={intradayInterval}
+            onIntervalChange={setIntradayInterval}
+          />
+        )}
+
         {view === 'journal' && <TradeJournalView />}
-        {view === 'reversal' && <ReversalTable rows={data.reversals ?? []} />}
+        {view === 'expenses' && <ExpensesView />}
+        {view === 'bullish' && (
+          <BullishStocksView
+            data={bullishData}
+            scanning={bullishScanning}
+            progress={bullishProgress}
+            scanError={bullishScanError}
+            loadError={bullishError}
+            onScan={runBullishScan}
+            queued={refreshing}
+          />
+        )}
+        {view === 'reversal' && (data
+          ? <ReversalTable rows={data.reversals ?? []} />
+          : <ScanPending scanning={refreshing} progress={refreshProgress} error={refreshError ?? loadFailure}
+              onScan={refreshAll} what="Reversal Watch" queued={bullishScanning} queuedBehind="Bullish ranking"
+              description="Scans the Nifty 500 for candlestick-confirmed reversal setups in beaten-down names." />)}
         {view === 'lookup' && (
           <WatchlistTable rows={customRows} expanded={expanded} setExpanded={setExpanded}
-            onRemove={removeCustom} />
+            onRemove={removeCustom} onOpenChart={setWatchlistChartRow} />
         )}
-
-        {view === 'breakout' && (
-        <>
-        <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Universe</span>
-            <div className="flex gap-1.5">
-              {UNIVERSES.map((u) => (
-                <FilterPill key={u.key} active={universe === u.key} onClick={() => setUniverse(u.key)}>
-                  {u.label}
-                </FilterPill>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Decision</span>
-            <div className="flex gap-1.5">
-              {DECISIONS.map((d) => (
-                <FilterPill key={d} active={decision === d} onClick={() => setDecision(d)}>
-                  {d === 'ALL' ? 'All' : d}
-                </FilterPill>
-              ))}
-            </div>
-          </div>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name or symbol…"
-            className="ml-auto w-52 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2"
-            style={{ ...inputStyle, '--tw-ring-color': 'var(--accent)' }}
+        {watchlistChartRow && (
+          <FullChartModal
+            row={{
+              symbol: watchlistChartRow.symbol,
+              name: watchlistChartRow.name,
+              values: {
+                'Prev resistance': watchlistChartRow.breakout.level,
+                'Breakout Confirm Level': watchlistChartRow.breakout.confirmedLevel,
+              },
+            }}
+            onClose={() => setWatchlistChartRow(null)}
           />
-        </div>
-
-        <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${'var(--gridline)'}` }}>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Symbol</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>A–J</th>
-                <th
-                  className="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide"
-                  style={{ color: 'var(--text-muted)' }}
-                  onClick={() => setSortDesc((s) => !s)}
-                >
-                  Setup / Entry {sortDesc ? '↓' : '↑'}
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Decision</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Close</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <Fragment key={row.symbol}>
-                  <tr
-                    onClick={() => setExpanded(expanded === row.symbol ? null : row.symbol)}
-                    className="cursor-pointer transition-colors"
-                    style={{ borderTop: `1px solid ${'var(--gridline)'}` }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{row.name ?? row.symbol}</span>
-                        {(row.universe === 'CUSTOM' || row.universe === 'NIFTY_500') && (
-                          <UniverseTag universe={row.universe} />
-                        )}
-                      </div>
-                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{row.symbol}</div>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <CheckDots checks={row.checks} />
-                    </td>
-                    <td className="tabular px-4 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      S {row.setupScore}/{row.setupTotal} &middot; E {row.entryScore}/{row.entryTotal}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <DecisionBadge classification={row.classification} />
-                    </td>
-                    <td className="tabular px-4 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>{row.values.Close?.toFixed(2)}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      {row.universe === 'CUSTOM' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            removeCustom(row.symbol)
-                          }}
-                          style={{ color: 'var(--text-muted)' }}
-                          title="Remove from custom list"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                  {expanded === row.symbol && (
-                    <tr>
-                      <td colSpan={7} className="p-0">
-                        <DetailPanel row={row} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
-                    No stocks match this filter.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        </>
         )}
+
       </div>
     </div>
   )
