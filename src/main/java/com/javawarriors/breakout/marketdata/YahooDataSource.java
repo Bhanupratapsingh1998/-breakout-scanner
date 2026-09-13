@@ -22,8 +22,20 @@ public class YahooDataSource {
     private final ObjectMapper mapper = new ObjectMapper();
 
     public List<Bar> fetchDaily(String symbol, String range) throws IOException {
+        return fetch(symbol, range, "1d");
+    }
+
+    /**
+     * Same endpoint at any granularity Yahoo supports ("1d", "60m", "15m", "5m").
+     *
+     * <p>Intraday intervals carry their own history limits upstream — roughly 60 days for 5m/15m —
+     * and the response is otherwise identical in shape, including the trailing null bar that the
+     * live-quote patch below handles. NSE intraday bars come back stamped in the exchange's own
+     * timezone, so a session boundary is a date change in Asia/Kolkata, not in UTC.
+     */
+    public List<Bar> fetch(String symbol, String range, String interval) throws IOException {
         String url = "https://query1.finance.yahoo.com/v8/finance/chart/"
-                + symbol + "?range=" + range + "&interval=1d";
+                + symbol + "?range=" + range + "&interval=" + interval;
 
         Request req = new Request.Builder()
                 .url(url)

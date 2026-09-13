@@ -1,7 +1,6 @@
 package com.javawarriors.breakout.scan;
 
-import com.javawarriors.breakout.breakout.BreakoutAnalyzer;
-import com.javawarriors.breakout.breakout.BreakoutResult;
+import com.javawarriors.breakout.marketdata.BarCache;
 import com.javawarriors.breakout.marketdata.BenchmarkSource;
 import com.javawarriors.breakout.marketdata.NiftyUniverse;
 import com.javawarriors.breakout.marketdata.NseIndexSource;
@@ -20,12 +19,21 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
-/** Runs the full Nifty 50 + Next 50 + Nifty 500 breakout scan and builds the API result payload. */
+/**
+ * Walks the Nifty 500 looking for candlestick-confirmed reversal setups.
+ *
+ * <p>This used to run the Breakout Scanner's A-J checklist as well, with the reversal pass riding
+ * along on the same fetched bars. The breakout feature has been removed and the reversal pass is
+ * what remains — it never depended on the checklist, only on the bars.
+ *
+ * <p>The universe helpers below are still shared: the Bullish Stocks engine builds its own
+ * watchlist from {@link #buildWatchlist} and tags rows with {@link #universeOf}, so both scans
+ * cover exactly the same symbols and tier them the same way.
+ */
 public class ScanRunner {
 
-    public record ScanOutcome(
-            List<BreakoutResult> results, List<TradeSetupResult> reversals,
-            int failed, int universeSize, Map<String, String> nifty500Names) {}
+    public record ScanOutcome(List<TradeSetupResult> reversals, int failed, int universeSize,
+                              Map<String, String> nifty500Names) {}
 
     /** Symbol -> tier: NIFTY_50, NEXT_50, or NIFTY_500. */
     public static String universeOf(String symbol) {
@@ -57,56 +65,46 @@ public class ScanRunner {
         BenchmarkSource.refreshAll(); // best-effort per index; degrades to whatever was already cached
 
         List<String> watchlist = buildWatchlist(nifty500Names);
-        BreakoutAnalyzer analyzer = new BreakoutAnalyzer();
         TradeSetupAnalyzer tradeSetupAnalyzer = new TradeSetupAnalyzer();
         YahooDataSource source = new YahooDataSource();
-        List<BreakoutResult> results = new ArrayList<>();
         List<TradeSetupResult> reversals = new ArrayList<>();
         int failed = 0;
 
         for (int i = 0; i < watchlist.size(); i++) {
             String symbol = watchlist.get(i);
             if (onProgress != null) onProgress.accept(symbol + " (" + (i + 1) + "/" + watchlist.size() + ")");
+            // Nothing was requested from Yahoo on a cache hit, so there is nothing to be polite
+            // about — the throttle below applies only to symbols that actually hit the network.
+            boolean servedFromCache = BarCache.peek(symbol, "18mo") != null;
             try {
-                List<Bar> bars = source.fetchDaily(symbol, "18mo");
+                // Through the shared cache so a bullish scan run in the same session reuses
+                // these bars instead of downloading the whole universe a second time.
+                List<Bar> bars = BarCache.daily(source, symbol, "18mo");
                 if (bars.size() < 200) {
                     failed++;
                     continue;
                 }
-                String universe = universeOf(symbol);
-                results.add(analyzer.analyze(symbol, bars, BenchmarkSource.barsFor(universe),
-                        BenchmarkSource.displayName(universe)));
-                // The same fetched bars feed the reversal/candlestick layer too — no second
-                // round of requests.
                 TradeSetupResult setup = tradeSetupAnalyzer.scoreReversalSetup(symbol, bars);
                 if (!"REJECTED".equals(setup.classification)) reversals.add(setup);
             } catch (Exception e) {
                 failed++;
             }
-            try {
-                Thread.sleep(150); // be polite to Yahoo's endpoint across hundreds of requests
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
+            if (!servedFromCache) {
+                try {
+                    Thread.sleep(150); // be polite to Yahoo's endpoint across hundreds of requests
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
 
-        results.sort((a, b) -> {
-            int t = b.tierRank() - a.tierRank();
-            return t != 0 ? t : b.score() - a.score();
-        });
         reversals.sort((a, b) -> b.candlestickScore - a.candlestickScore);
-        return new ScanOutcome(results, reversals, failed, watchlist.size(), nifty500Names);
+        return new ScanOutcome(reversals, failed, watchlist.size(), nifty500Names);
     }
 
     /** Builds the JSON-shaped result payload served by GET /api/results. */
-    public static Map<String, Object> buildPayload(List<BreakoutResult> results, List<TradeSetupResult> reversals,
+    public static Map<String, Object> buildPayload(List<TradeSetupResult> reversals,
                                                      int universeSize, Map<String, String> nifty500Names) {
-        List<Map<String, Object>> out = new ArrayList<>();
-        for (BreakoutResult r : results) {
-            String name = nifty500Names.getOrDefault(r.symbol, NiftyUniverse.NAMES.getOrDefault(r.symbol, r.symbol));
-            out.add(r.toRow(name, universeOf(r.symbol)));
-        }
-
         List<Map<String, Object>> reversalOut = new ArrayList<>();
         for (TradeSetupResult r : reversals) {
             String name = nifty500Names.getOrDefault(r.symbol, NiftyUniverse.NAMES.getOrDefault(r.symbol, r.symbol));
@@ -116,7 +114,6 @@ public class ScanRunner {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("generatedAt", Instant.now().toString());
         payload.put("universe", universeSize);
-        payload.put("results", out);
         payload.put("reversals", reversalOut);
         return payload;
     }
