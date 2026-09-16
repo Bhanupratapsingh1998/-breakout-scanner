@@ -197,6 +197,9 @@ function ViewTabs({ view, setView, reversalCount, watchlistCount = 0, intradayCo
       <FilterPill active={view === 'bullish'} onClick={() => setView('bullish')}>
         Bullish Stocks
       </FilterPill>
+      <FilterPill active={view === 'index500'} onClick={() => setView('index500')}>
+        Index 500 Analysis
+      </FilterPill>
       <FilterPill active={view === 'intraday'} onClick={() => setView('intraday')}>
         Intraday Scanner{intradayCount > 0 ? ` (${intradayCount})` : ''}
       </FilterPill>
@@ -1426,6 +1429,57 @@ const REGIME_META = {
   BEARISH: { color: 'var(--status-critical)', label: 'Bearish' },
 }
 
+/**
+ * The summary tiles, each paired with the predicate the server counted it with.
+ *
+ * <p>These used to be static numbers. That made them unreachable: "Breakouts 47" counts a confirmed
+ * breakout, but the STATUS pills filter on trade status, and those 47 stocks are spread across
+ * WAIT FOR BREAKOUT, WAIT FOR RETEST, WAIT FOR PULLBACK and AVOID CHASING - so no pill could ever
+ * select the group the tile was advertising. The predicates below are kept deliberately identical
+ * to the server's, so a tile's count and the rows it filters to can never disagree.
+ */
+const BULLISH_GROUPS = [
+  { key: 'ALL', label: 'Ranked', countKey: 'analyzedStockCount', color: 'var(--text-secondary)', match: () => true },
+  { key: 'BULLISH', label: 'Bullish', countKey: 'bullishStockCount', color: 'var(--accent)',
+    match: (r) => r.score >= 65 },
+  { key: 'APLUS', label: 'A+ setups', countKey: 'aPlusCount', color: 'var(--status-good)',
+    match: (r) => r.score >= 85 },
+  { key: 'BREAKOUT', label: 'Breakouts', countKey: 'breakoutCount', color: 'var(--status-good)',
+    match: (r) => r.breakout?.confirmed && !r.breakout?.failed },
+  { key: 'PULLBACK', label: 'Pullbacks / retests', countKey: 'pullbackCount', color: 'var(--status-warning)',
+    match: (r) => r.setupStage === 'PULLBACK OPPORTUNITY' || r.setupStage === 'BREAKOUT RETEST' },
+  { key: 'BUYNOW', label: 'Buy now', countKey: 'buyNowCount', color: 'var(--status-good)',
+    match: (r) => r.tradeStatus === 'BUY NOW' },
+]
+
+/** A summary tile that is also the filter for the group it counts. */
+function GroupTile({ group, count, served, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-1 flex-col gap-1.5 rounded-xl border p-4 text-left transition-all"
+      style={{
+        minWidth: '9rem',
+        borderColor: active ? group.color : 'var(--border)',
+        background: active ? 'var(--page-plane)' : 'var(--surface-1)',
+        boxShadow: active ? 'var(--shadow-md)' : 'none',
+      }}
+    >
+      <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide"
+        style={{ color: active ? group.color : 'var(--text-secondary)' }}>
+        <Dot color={group.color} size={7} />
+        {group.label}
+      </span>
+      <span className="tabular text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>{count}</span>
+      {/* The tiles count every analysed stock; the table can only show the rows actually served.
+          Saying so is better than a tile that seems to disagree with the list under it. */}
+      {served != null && served < count && (
+        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{served} in this list</span>
+      )}
+    </button>
+  )
+}
+
 const BULLISH_SORTS = [
   { key: 'score', label: 'Score', get: (r) => r.score },
   { key: 'rs', label: 'Rel. strength', get: (r) => r.summary.rs3mPct ?? -999 },
@@ -1523,63 +1577,283 @@ const SCORE_COMPONENT_LABELS = {
 }
 
 /** Everything section 14 asks to show when a stock is selected. */
+/** Consistent chrome for every block in the detail panel, so nothing drifts out of alignment. */
+function PanelCard({ title, meta, children }) {
+  return (
+    <section className="rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      <header className="flex items-baseline justify-between gap-2 border-b px-3.5 py-2.5" style={{ borderColor: 'var(--gridline)' }}>
+        <h4 className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+          {title}
+        </h4>
+        {meta && <span className="tabular shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>{meta}</span>}
+      </header>
+      <div className="px-3.5 py-3">{children}</div>
+    </section>
+  )
+}
+
+/**
+ * The score as an arc rather than a number in a box.
+ *
+ * <p>"78.5" alone does not say what it is out of, and the table already shows the digits. The ring
+ * is here to answer "how far along is this" at a glance, which is the one thing the number cannot
+ * do on its own.
+ */
+function ScoreDial({ score, color, size = 74 }) {
+  const r = (size - 9) / 2
+  const circumference = 2 * Math.PI * r
+  const pct = Math.max(0, Math.min(1, (score ?? 0) / 100))
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--gridline)" strokeWidth="6" />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round"
+          strokeDasharray={`${circumference * pct} ${circumference}`}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="tabular text-lg font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
+          {num(score, 0)}
+        </span>
+        <span className="text-[9px] leading-none" style={{ color: 'var(--text-muted)' }}>/ 100</span>
+      </div>
+    </div>
+  )
+}
+
+/** One figure in the trade-plan strip: a label, a price, and what that price means as a move. */
+function PlanFigure({ label, value, sub, color, emphasis }) {
+  return (
+    <div className="min-w-[5.5rem] flex-1">
+      <div className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </div>
+      <div className={`tabular mt-1 ${emphasis ? 'text-lg' : 'text-base'} font-semibold leading-none`}
+        style={{ color: color ?? 'var(--text-primary)' }}>
+        {value}
+      </div>
+      {sub && (
+        <div className="tabular mt-1 text-[11px]" style={{ color: color ?? 'var(--text-muted)' }}>{sub}</div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Entry, stop and targets drawn to scale on one axis.
+ *
+ * <p>A 7:1 risk/reward is a claim about proportion, and four prices in a column do not show a
+ * proportion — you have to do the subtraction yourself. Drawn to scale, a thin red band against a
+ * wide green one says it immediately, and a setup whose stop is nearly as far as its target cannot
+ * hide behind a flattering ratio.
+ */
+function RiskRewardBar({ entry, stopLoss, target1, target2 }) {
+  if (entry == null || stopLoss == null || target1 == null) return null
+  const top = target2 ?? target1
+  const lo = Math.min(stopLoss, entry)
+  const hi = Math.max(top, entry)
+  const span = hi - lo
+  if (!(span > 0)) return null
+
+  const at = (v) => ((v - lo) / span) * 100
+  const entryAt = at(entry)
+  const t1At = at(target1)
+
+  return (
+    <div className="mt-4">
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--gridline)' }}>
+        <span style={{ width: `${entryAt}%`, background: 'var(--status-critical)' }} />
+        <span style={{ width: `${t1At - entryAt}%`, background: 'var(--status-good)' }} />
+        <span style={{ width: `${100 - t1At}%`, background: 'var(--status-good)', opacity: 0.4 }} />
+      </div>
+      <div className="mt-1.5 flex text-[10px]" style={{ color: 'var(--text-muted)' }}>
+        <span style={{ width: `${entryAt}%` }}>risk</span>
+        <span style={{ width: `${t1At - entryAt}%` }}>to target 1</span>
+        {target2 != null && <span className="flex-1 text-right">target 2</span>}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A signed percentage with a bar proportional to the largest value on show.
+ *
+ * <p>Seven stacked percentages are seven separate readings; scaled against each other they become
+ * one shape, and it is obvious at a glance whether relative strength is broad or rests on a single
+ * window. Zero sits at the centre so a negative reading is visibly different in kind, not just in
+ * sign.
+ */
+function ReturnRow({ label, value, peak }) {
+  const v = value == null || Number.isNaN(value) ? null : Number(value)
+  const positive = (v ?? 0) >= 0
+  const width = v == null || !(peak > 0) ? 0 : Math.min(50, (Math.abs(v) / peak) * 50)
+  const color = v == null ? 'var(--text-muted)' : positive ? 'var(--status-good)' : 'var(--status-critical)'
+  return (
+    <div className="flex items-center gap-2 py-[3px]">
+      <span className="w-24 shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>{label}</span>
+      <span className="relative h-1.5 flex-1 rounded-full" style={{ background: 'var(--gridline)' }}>
+        <span className="absolute inset-y-0" style={{ left: '50%', width: 1, background: 'var(--border-strong)' }} />
+        <span
+          className="absolute inset-y-0 rounded-full"
+          style={{ background: color, width: `${width}%`, left: positive ? '50%' : `${50 - width}%` }}
+        />
+      </span>
+      <span className="tabular w-14 shrink-0 text-right text-xs font-semibold" style={{ color }}>
+        {signedPct(v)}
+      </span>
+    </div>
+  )
+}
+
+const OVEREXTENSION_COLOR = {
+  NONE: 'var(--status-good)',
+  MODERATE: 'var(--status-warning)',
+}
+
+/**
+ * Everything the engine concluded about one stock, ordered by what a decision actually needs.
+ *
+ * <p>The old layout was eight boxes of identical weight, which left the trade plan — the only part
+ * that is acted on — sitting between "Levels" and "Extension check" and looking no more important
+ * than either. Here the thesis and the plan come first at full width, and the supporting evidence
+ * sits underneath in three columns for anyone who wants to check the reasoning.
+ */
 function BullishDetailPanel({ row, onOpenChart }) {
   const c = row.scoreBreakdown.components
   const plan = row.tradePlan
+  const statusMeta = BULLISH_STATUS_META[row.tradeStatus]
+    ?? { color: 'var(--text-muted)', label: row.tradeStatus }
+  const classColor = CLASSIFICATION_COLOR[row.classification] ?? 'var(--text-muted)'
+
+  const returns = [
+    ['1M return', row.momentum.return1mPct],
+    ['3M return', row.momentum.return3mPct],
+    ['6M return', row.momentum.return6mPct],
+    ['1M vs market', row.relativeStrength.excess1mPct],
+    ['3M vs market', row.relativeStrength.excess3mPct],
+    ['6M vs market', row.relativeStrength.excess6mPct],
+    ['3M vs Nifty 50', row.relativeStrength.excessVsNifty50_3mPct],
+  ]
+  // One scale across all seven, so the bars are comparable with each other rather than each
+  // being drawn against its own maximum.
+  const peak = Math.max(...returns.map(([, v]) => (v == null || Number.isNaN(v) ? 0 : Math.abs(v))), 1)
+
+  const move = (to) => (plan.entry > 0 && to != null ? (to / plan.entry - 1) * 100 : null)
+
   return (
-    <div className="border-t px-4 py-4" style={{ borderColor: 'var(--gridline)', background: 'var(--page-plane)' }}>
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-3xl text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-          {row.whyBullish}
-        </p>
+    <div
+      className="border-t px-4 py-5"
+      style={{
+        borderColor: 'var(--gridline)',
+        background: 'var(--page-plane)',
+        position: 'sticky',
+        left: 0,
+        width: 'min(100%, calc(100vw - 2rem))',
+      }}
+    >
+      {/* ---- the thesis, with the score it produced ---- */}
+      <div className="mb-4 flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-start"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+        <div className="flex items-center gap-3 sm:flex-col sm:gap-2">
+          <ScoreDial score={row.score} color={classColor} />
+          <div className="text-center">
+            <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: classColor }}>
+              {row.classification}
+            </div>
+            {row.scoreBreakdown.regimeMultiplier !== 1 && (
+              <div className="tabular mt-0.5 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                raw {num(row.scoreBreakdown.rawTotal, 1)} × {row.scoreBreakdown.regimeMultiplier}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <StatusBadgeBullish status={row.tradeStatus} />
+            {row.setupStage && row.setupStage !== row.tradeStatus && (
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                style={{ background: 'var(--accent-wash)', color: 'var(--accent)' }}>
+                {row.setupStage}
+              </span>
+            )}
+            <span className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+              style={{ background: 'var(--page-plane)', color: 'var(--text-muted)' }}>
+              {row.pattern.name}
+            </span>
+          </div>
+          <p className="max-w-3xl text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            {row.whyBullish}
+          </p>
+        </div>
+
         <button
           onClick={(e) => { e.stopPropagation(); onOpenChart(row) }}
-          className="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold"
-          style={{ borderColor: 'var(--border)', color: 'var(--text-primary)', background: 'var(--surface-1)' }}
+          className="shrink-0 rounded-lg border px-3.5 py-2 text-xs font-semibold transition-opacity hover:opacity-80"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-primary)', background: 'var(--page-plane)' }}
         >
           Open chart
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-            Score breakdown — {num(row.score, 1)}/100
+      {/* ---- the plan, at full width because it is the only part that gets acted on ---- */}
+      <div className="mb-4 rounded-xl border p-4"
+        style={{ borderColor: statusMeta.color, background: 'var(--surface-1)' }}>
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h4 className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+            Trade plan
           </h4>
+          {plan.present && (
+            <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+              entry {plan.entryType.toLowerCase()}
+            </span>
+          )}
+        </div>
+
+        {plan.present ? (
+          <>
+            <div className="flex flex-wrap gap-x-6 gap-y-4">
+              <PlanFigure label="Entry" value={fmtPrice(plan.entry)} emphasis />
+              <PlanFigure label="Stop loss" value={fmtPrice(plan.stopLoss)} color="var(--status-critical)"
+                sub={`${signedPct(move(plan.stopLoss))} · risk ${num(plan.riskPct, 1)}%`} />
+              <PlanFigure label="Target 1" value={fmtPrice(plan.target1)} color="var(--status-good)"
+                sub={signedPct(move(plan.target1))} />
+              <PlanFigure label="Target 2" value={fmtPrice(plan.target2)} color="var(--status-good)"
+                sub={signedPct(move(plan.target2))} />
+              <PlanFigure label="Risk : reward" value={`${num(plan.riskReward, 1)} : 1`} emphasis
+                sub={`reward ${num(plan.rewardPct, 1)}%`} />
+            </div>
+            <RiskRewardBar entry={plan.entry} stopLoss={plan.stopLoss}
+              target1={plan.target1} target2={plan.target2} />
+          </>
+        ) : (
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{plan.explanation}</p>
+        )}
+      </div>
+
+      {/* ---- the evidence ---- */}
+      <div className="grid items-start gap-4 md:grid-cols-3">
+        <PanelCard title="Score breakdown" meta={`${num(row.score, 1)} / 100`}>
           <div className="flex flex-col gap-2.5">
             {Object.entries(SCORE_COMPONENT_LABELS).map(([key, label]) => (
               <ScoreBar key={key} label={label} points={c[key].points} maxPoints={c[key].maxPoints} />
             ))}
           </div>
-          {row.scoreBreakdown.regimeMultiplier !== 1 && (
-            <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-              Raw {num(row.scoreBreakdown.rawTotal, 1)} × {row.scoreBreakdown.regimeMultiplier} market-regime adjustment.
-            </p>
-          )}
-        </div>
+        </PanelCard>
 
         <div className="flex flex-col gap-4">
-          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-              Pattern
-            </h4>
+          <PanelCard title="Pattern"
+            meta={row.pattern.confidence > 0 ? `${num(row.pattern.confidence, 0)}% confidence` : null}>
             <div className="mb-1.5 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
               {row.pattern.name}
-              {row.pattern.confidence > 0 && (
-                <span className="tabular ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
-                  {num(row.pattern.confidence, 0)}% confidence
-                </span>
-              )}
             </div>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               {row.pattern.explanation}
             </p>
-          </div>
+          </PanelCard>
 
-          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-              Levels
-            </h4>
+          <PanelCard title="Levels">
             <DetailRow label="Current price" value={fmtPrice(row.price)} />
             {row.breakout.level != null && <DetailRow label="Breakout level" value={fmtPrice(row.breakout.level)} />}
             {row.pattern.resistance != null && <DetailRow label="Resistance / neckline" value={fmtPrice(row.pattern.resistance)} />}
@@ -1588,33 +1862,11 @@ function BullishDetailPanel({ row, onOpenChart }) {
             )}
             <DetailRow label="Breakout status" value={row.breakout.label} />
             <DetailRow label="Setup stage" value={row.setupStage} />
-          </div>
-
-          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-              Trade plan
-            </h4>
-            {plan.present ? (
-              <>
-                <DetailRow label={`Entry (${plan.entryType.toLowerCase()})`} value={fmtPrice(plan.entry)} />
-                <DetailRow label="Stop loss" value={fmtPrice(plan.stopLoss)} color="var(--status-critical)" />
-                <DetailRow label="Target 1" value={fmtPrice(plan.target1)} color="var(--status-good)" />
-                <DetailRow label="Target 2" value={fmtPrice(plan.target2)} color="var(--status-good)" />
-                <DetailRow label="Risk" value={`${num(plan.riskPct, 1)}%`} />
-                <DetailRow label="Reward" value={`${num(plan.rewardPct, 1)}%`} />
-                <DetailRow label="Risk : reward" value={`${num(plan.riskReward, 1)}:1`} />
-              </>
-            ) : (
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{plan.explanation}</p>
-            )}
-          </div>
+          </PanelCard>
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-              Indicators
-            </h4>
+          <PanelCard title="Indicators">
             <DetailRow label="Trend" value={row.trend.label} />
             <DetailRow label="Structure" value={row.trend.structure} />
             <DetailRow label="Higher timeframes" value={row.higherTimeframes.verdict} />
@@ -1622,43 +1874,57 @@ function BullishDetailPanel({ row, onOpenChart }) {
             <DetailRow label="ADX(14)" value={num(row.momentum.adx, 1)} />
             <DetailRow label="Volume vs 20D" value={`${num(row.volume.currentRatio, 2)}×`} />
             <DetailRow label="Volume profile" value={row.volume.label} />
-          </div>
+          </PanelCard>
 
-          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-              Returns & relative strength
-            </h4>
-            <DetailRow label="1M return" value={signedPct(row.momentum.return1mPct)} />
-            <DetailRow label="3M return" value={signedPct(row.momentum.return3mPct)} />
-            <DetailRow label="6M return" value={signedPct(row.momentum.return6mPct)} />
-            <DetailRow label="1M vs market" value={signedPct(row.relativeStrength.excess1mPct)} />
-            <DetailRow label="3M vs market" value={signedPct(row.relativeStrength.excess3mPct)} />
-            <DetailRow label="6M vs market" value={signedPct(row.relativeStrength.excess6mPct)} />
-            <DetailRow label="3M vs Nifty 50" value={signedPct(row.relativeStrength.excessVsNifty50_3mPct)} />
-          </div>
-
-          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-              Extension check
-            </h4>
-            <DetailRow
-              label="Reading"
-              value={row.overextension.level}
-              color={row.overextension.level === 'NONE' ? 'var(--status-good)'
-                : row.overextension.level === 'MODERATE' ? 'var(--status-warning)' : 'var(--status-critical)'}
-            />
-            <DetailRow label="ATRs above EMA20" value={num(row.overextension.atrsAboveEma20, 1)} />
-            <DetailRow label="Above EMA50" value={signedPct(row.overextension.pctAboveEma50)} />
-            <p className="mt-2 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              {row.overextension.explanation}
-            </p>
-          </div>
+          <PanelCard title="Returns & relative strength" meta="vs zero">
+            {returns.map(([label, value]) => (
+              <ReturnRow key={label} label={label} value={value} peak={peak} />
+            ))}
+          </PanelCard>
         </div>
       </div>
 
+      {/* ---- how stretched it already is: a caveat, so it reads as one ---- */}
+      <div className="mt-4 flex flex-col gap-2 rounded-xl border border-l-4 px-4 py-3 sm:flex-row sm:items-center sm:gap-5"
+        style={{
+          borderColor: 'var(--border)',
+          borderLeftColor: OVEREXTENSION_COLOR[row.overextension.level] ?? 'var(--status-critical)',
+          background: 'var(--surface-1)',
+        }}>
+        <div className="shrink-0">
+          <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+            Extension check
+          </div>
+          <div className="text-sm font-semibold"
+            style={{ color: OVEREXTENSION_COLOR[row.overextension.level] ?? 'var(--status-critical)' }}>
+            {row.overextension.level}
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-5">
+          <div>
+            <div className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {num(row.overextension.atrsAboveEma20, 1)}
+            </div>
+            <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>ATRs above EMA20</div>
+          </div>
+          <div>
+            <div className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {signedPct(row.overextension.pctAboveEma50)}
+            </div>
+            <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>above EMA50</div>
+          </div>
+        </div>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          {row.overextension.explanation}
+        </p>
+      </div>
+
+      {/* The status reason is appended to whyBullish whenever the setup is not tradeable, so
+          repeating it here would be the third time the same sentence appears on this panel. */}
       <p className="mt-4 text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-        {row.statusReason} This is a ranking of setup quality from price and volume data — not a forecast,
-        and not a promise of any particular return.
+        {row.statusReason && !row.whyBullish.includes(row.statusReason) ? `${row.statusReason} ` : ''}
+        This is a ranking of setup quality from price and volume data — not a forecast, and not a
+        promise of any particular return.
       </p>
     </div>
   )
@@ -1673,6 +1939,7 @@ function BullishDetailPanel({ row, onOpenChart }) {
  * about: the filter, sort and expansion of the table.
  */
 function BullishStocksView({ data, scanning, progress, scanError, loadError, onScan, queued }) {
+  const [group, setGroup] = useState('ALL')
   const [status, setStatus] = useState('ALL')
   const [pattern, setPattern] = useState('ALL')
   const [sector, setSector] = useState('ALL')
@@ -1699,6 +1966,8 @@ function BullishStocksView({ data, scanning, progress, scanError, loadError, onS
 
   const rows = useMemo(() => {
     let r = stocks
+    const g = BULLISH_GROUPS.find((x) => x.key === group)
+    if (g && g.key !== 'ALL') r = r.filter(g.match)
     if (status !== 'ALL') r = r.filter((x) => x.tradeStatus === status)
     if (pattern !== 'ALL') r = r.filter((x) => x.pattern.name === pattern)
     if (sector !== 'ALL') r = r.filter((x) => x.sector === sector)
@@ -1708,7 +1977,15 @@ function BullishStocksView({ data, scanning, progress, scanError, loadError, onS
     }
     const sort = BULLISH_SORTS.find((s) => s.key === sortKey) ?? BULLISH_SORTS[0]
     return [...r].sort((a, b) => sort.get(b) - sort.get(a))
-  }, [stocks, status, pattern, sector, query, sortKey])
+  }, [stocks, group, status, pattern, sector, query, sortKey])
+
+  // How many of each group the served list actually contains. The tiles count every analysed
+  // stock, but the payload is capped, so the two legitimately differ on a large universe.
+  const servedCounts = useMemo(() => {
+    const out = {}
+    BULLISH_GROUPS.forEach((g) => { out[g.key] = g.key === 'ALL' ? stocks.length : stocks.filter(g.match).length })
+    return out
+  }, [stocks])
 
   // No ranking yet. Opening this tab starts one, so the usual case is that a scan is already
   // under way by the time this renders — which is a progress report, not an empty state.
@@ -1791,13 +2068,22 @@ function BullishStocksView({ data, scanning, progress, scanError, loadError, onS
 
       <MarketRegimeBanner regime={data.marketRegime} />
 
-      <div className="mb-6 flex flex-wrap gap-3">
-        <StatTile label="Bullish" value={data.bullishStockCount} color="var(--accent)" />
-        <StatTile label="A+ setups" value={data.aPlusCount} color="var(--status-good)" />
-        <StatTile label="Breakouts" value={data.breakoutCount} color="var(--status-good)" />
-        <StatTile label="Pullbacks / retests" value={data.pullbackCount} color="var(--status-warning)" />
-        <StatTile label="Buy now" value={data.buyNowCount} color="var(--status-good)" />
+      {/* Each tile filters to the group it counts — see BULLISH_GROUPS. */}
+      <div className="mb-2 flex flex-wrap gap-3">
+        {BULLISH_GROUPS.map((g) => (
+          <GroupTile
+            key={g.key}
+            group={g}
+            count={data[g.countKey] ?? 0}
+            served={servedCounts[g.key]}
+            active={group === g.key}
+            onClick={() => setGroup(group === g.key ? 'ALL' : g.key)}
+          />
+        ))}
       </div>
+      <p className="mb-5 text-xs" style={{ color: 'var(--text-muted)' }}>
+        Tap a tile to filter the table to that group.
+      </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -1935,6 +2221,15 @@ function BullishStocksView({ data, scanning, progress, scanError, loadError, onS
                     </td>
                     <td className="px-3 py-2.5">
                       <StatusBadgeBullish status={row.tradeStatus} />
+                      {/* The stage is what the summary tiles group by, and it is not always
+                          obvious from the status: a stock whose breakout is confirmed can still
+                          read "Wait for breakout" when the trend is what is blocking the entry.
+                          Showing both stops that looking like a contradiction. */}
+                      {row.setupStage && row.setupStage !== row.tradeStatus && (
+                        <div className="mt-0.5 text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                          {row.setupStage}
+                        </div>
+                      )}
                     </td>
                   </tr>
                   {expanded === row.symbol && (
@@ -3346,7 +3641,7 @@ function TopSetups({ stocks, onOpen }) {
  * is what starts that scan. The previous behaviour — a full-screen "No scan data yet" wall in front
  * of the entire app — made the first five minutes of every cold start show nothing at all.
  */
-function DashboardView({ reversal, bullish, intraday, watchlistCount, onOpen }) {
+function DashboardView({ reversal, bullish, intraday, index500, watchlistCount, onOpen }) {
   const [regime, setRegime] = useState(null)
   const [regimeError, setRegimeError] = useState(null)
   const [money, setMoney] = useState(null)
@@ -3470,6 +3765,20 @@ function DashboardView({ reversal, bullish, intraday, watchlistCount, onOpen }) 
         />
 
         <FeatureCard
+          title="Index 500 Analysis"
+          description="Ranks every sector by six-month performance, then finds which fallen stocks inside them are showing a confirmed reversal or breakout pattern."
+          state={index500.scanning ? 'running' : index500.data ? 'ready' : 'idle'}
+          accent="var(--cat-nifty50)"
+          detail={index500.scanning ? (index500.progress ?? 'Analysing') : undefined}
+          metrics={index500.data ? [
+            { label: 'Decliners', value: index500.data.declinerCount, color: 'var(--status-critical)' },
+            { label: 'Patterns', value: index500.data.patternCount, color: 'var(--accent)' },
+            { label: 'Reversals', value: index500.data.reversalCount, color: 'var(--status-good)' },
+          ] : null}
+          onOpen={() => onOpen('index500')}
+        />
+
+        <FeatureCard
           title="Reversal Watch"
           description="Scans the Nifty 500 for candlestick-confirmed reversal setups in beaten-down names — a bearish 12-month context, a reversal pattern, and a confirmed close above it."
           state={reversalState}
@@ -3518,9 +3827,543 @@ function DashboardView({ reversal, bullish, intraday, watchlistCount, onOpen }) 
   )
 }
 
+const INDEX500_STATUS_META = {
+  'STRONG REVERSAL': { color: 'var(--status-good)', label: 'Strong reversal' },
+  'REVERSAL WATCH': { color: 'var(--status-good)', label: 'Reversal watch' },
+  'BREAKOUT CONFIRMED': { color: 'var(--accent)', label: 'Breakout confirmed' },
+  'BREAKOUT CANDIDATE': { color: 'var(--accent)', label: 'Breakout candidate' },
+  RECOVERY: { color: 'var(--status-warning)', label: 'Recovery' },
+  'WAIT FOR CONFIRMATION': { color: 'var(--status-warning)', label: 'Wait for confirmation' },
+  WEAK: { color: 'var(--text-muted)', label: 'Weak' },
+  AVOID: { color: 'var(--status-critical)', label: 'Avoid' },
+  DATA_UNAVAILABLE: { color: 'var(--text-muted)', label: 'No data' },
+}
+
+/** The sort keys the ranking service understands, with the wording this tab uses for them. */
+const INDEX500_SORTS = [
+  ['score', 'Opportunity score'],
+  ['decline', 'Biggest 6M decline'],
+  ['recovery', 'Strongest recovery'],
+  ['pattern', 'Pattern quality'],
+  ['return1d', "Today's move"],
+  ['return1m', '1M return'],
+  ['return3m', '3M return'],
+  ['return1y', '1Y return'],
+  ['rsi', 'RSI'],
+  ['adx', 'ADX'],
+  ['volume', 'Volume ratio'],
+  ['fromHigh', 'Furthest below 52W high'],
+]
+
+const INDEX500_SCORE_LABELS = {
+  decline: 'Decline depth',
+  pattern: 'Reversal pattern',
+  structure: 'Price structure',
+  volume: 'Volume',
+  rsi: 'RSI',
+  adx: 'Trend strength',
+  ema: 'EMA structure',
+  relativeStrength: 'Relative strength',
+}
+
+/** Header label and alignment, in order. The single definition of the table's shape. */
+const INDEX500_COLUMNS = [
+  ['#', 'left'], ['Stock', 'left'], ['Sector', 'left'], ['Price', 'right'],
+  ['1D', 'right'], ['1M', 'right'], ['3M', 'right'], ['6M', 'right'], ['1Y', 'right'],
+  ['6M rank', 'right'], ['Pattern', 'left'], ['RSI', 'right'], ['ADX', 'right'],
+  ['Vol', 'right'], ['EMA', 'left'], ['Score', 'left'], ['Status', 'left'],
+]
+
+const INDEX500_EMPTY_FILTERS = {
+  sector: 'ALL', pattern: 'ALL', minDrop: '', minRsi: '', maxRsi: '', minVolumeRatio: '', sortBy: 'score',
+}
+
+/**
+ * A percentage that reads green above zero and red below it, and an em dash when it is absent.
+ *
+ * <p>Coerces before testing, because Jackson serialises a Double.NaN as the JSON *string* "NaN" —
+ * which is truthy and slips straight past `Number.isNaN`. A stock younger than a year, or a sector
+ * with nothing analysed in it, arrives that way, and without this it renders as "+NaN%".
+ */
+function pctCell(v, digits = 1) {
+  const n = Number(v)
+  if (v == null || !Number.isFinite(n)) return { text: '—', color: 'var(--text-muted)' }
+  return {
+    text: `${n >= 0 ? '+' : ''}${n.toFixed(digits)}%`,
+    color: n >= 0 ? 'var(--status-good)' : 'var(--status-critical)',
+  }
+}
+
+/** The finite value, or null — the same "NaN"-as-a-string guard as {@link pctCell}. */
+function finite(v) {
+  const n = Number(v)
+  return v == null || !Number.isFinite(n) ? null : n
+}
+
+function Index500StatusBadge({ status }) {
+  const meta = INDEX500_STATUS_META[status] ?? { color: 'var(--text-muted)', label: status }
+  return (
+    <span className="inline-flex items-start gap-1.5 text-xs font-semibold leading-tight" style={{ color: meta.color }}>
+      <span className="mt-1 shrink-0"><Dot color={meta.color} size={7} /></span>
+      {meta.label}
+    </span>
+  )
+}
+
+/**
+ * Sector-level performance — the "where to look" step that comes before picking a stock.
+ *
+ * <p>Weakest six months first, because that is the order this feature is built around: the sectors
+ * at the top of this list are the ones whose decliners are worth examining. Clicking one filters
+ * the table below to it, so the heatmap is the sector filter rather than a chart beside it.
+ */
+function SectorHeatmap({ sectors, selected, onSelect }) {
+  const [showAll, setShowAll] = useState(false)
+  if (!sectors || sectors.length === 0) return null
+  const peak = Math.max(...sectors.map((s) => Math.abs(finite(s.avgReturn6mPct) ?? 0)), 1)
+  // The chosen sector is always in the list, even when it is not one of the worst eight —
+  // otherwise selecting it from the dropdown leaves the heatmap showing no selection at all.
+  const top = sectors.slice(0, 8)
+  const shown = showAll || top.some((s) => s.sector === selected)
+    ? (showAll ? sectors : top)
+    : [...top, ...sectors.filter((s) => s.sector === selected)]
+  return (
+    <div className="mb-5 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--gridline)' }}>
+        <div>
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Sector performance</span>
+          <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Average six-month return, weakest first — click a sector to filter the table to it
+          </p>
+        </div>
+        {selected !== 'ALL' && (
+          <button onClick={() => onSelect('ALL')} className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>
+            Clear sector
+          </button>
+        )}
+      </div>
+      <div>
+        {shown.map((s) => {
+          const avg = finite(s.avgReturn6mPct)
+          const negative = avg != null && avg < 0
+          const width = avg == null ? 0 : Math.max(2, (Math.abs(avg) / peak) * 100)
+          const active = selected === s.sector
+          return (
+            <button
+              key={s.sector}
+              onClick={() => onSelect(active ? 'ALL' : s.sector)}
+              className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors"
+              style={{ background: active ? 'var(--accent-wash)' : 'transparent', borderTop: '1px solid var(--gridline)' }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--page-plane)' }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
+            >
+              <span className="w-40 shrink-0 truncate text-xs font-medium"
+                style={{ color: active ? 'var(--accent)' : 'var(--text-primary)' }}>
+                {s.sector}
+              </span>
+              <span className="tabular w-16 shrink-0 text-right text-xs font-semibold"
+                style={{ color: avg == null ? 'var(--text-muted)' : negative ? 'var(--status-critical)' : 'var(--status-good)' }}>
+                {pctCell(s.avgReturn6mPct).text}
+              </span>
+              <span className="h-2 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--gridline)' }}>
+                <span className="block h-full rounded-full"
+                  style={{ width: `${width}%`, background: negative ? 'var(--status-critical)' : 'var(--status-good)' }} />
+              </span>
+              <span className="hidden w-28 shrink-0 text-right text-[11px] sm:block" style={{ color: 'var(--text-muted)' }}>
+                {avg == null ? `${s.stocks} without data` : `${s.declining} down · ${s.advancing} up`}
+              </span>
+              <span className="tabular hidden w-16 shrink-0 text-right text-[11px] md:block" style={{ color: 'var(--text-muted)' }}>
+                {s.patternCount} pattern{s.patternCount === 1 ? '' : 's'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      {sectors.length > 8 && (
+        <button onClick={() => setShowAll(!showAll)}
+          className="w-full px-4 py-2 text-xs font-semibold"
+          style={{ borderTop: '1px solid var(--gridline)', color: 'var(--accent)' }}>
+          {showAll ? 'Show fewer' : `Show all ${sectors.length} sectors`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** The expanded row: why this stock scored what it did, and every pattern found on its chart. */
+function Index500Detail({ row }) {
+  const c = row.scoreBreakdown?.components ?? {}
+  return (
+    <div className="border-t px-4 py-4" style={{ borderColor: 'var(--gridline)', background: 'var(--page-plane)' }}>
+      <p className="mb-4 max-w-4xl text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+        {row.statusReason}
+      </p>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <h4 className="mb-3 text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Opportunity score — {num(row.score, 1)} / {row.scoreBreakdown?.maxScore ?? 100}
+          </h4>
+          <div className="flex flex-col gap-2.5">
+            {Object.entries(INDEX500_SCORE_LABELS).map(([key, label]) => (
+              c[key] ? <ScoreBar key={key} label={label} points={c[key].points} maxPoints={c[key].maxPoints} /> : null
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <h4 className="mb-2 text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Performance and levels
+          </h4>
+          <DetailRow label="Today" value={pctCell(row.return1dPct).text} color={pctCell(row.return1dPct).color} />
+          <DetailRow label="1M" value={pctCell(row.return1mPct).text} color={pctCell(row.return1mPct).color} />
+          <DetailRow label="3M" value={pctCell(row.return3mPct).text} color={pctCell(row.return3mPct).color} />
+          <DetailRow label="6M" value={pctCell(row.return6mPct).text} color={pctCell(row.return6mPct).color} />
+          <DetailRow label="1Y" value={pctCell(row.return1yPct).text} color={pctCell(row.return1yPct).color} />
+          <DetailRow label="Below 52W high" value={pctCell(row.fromHigh52wPct).text} color="var(--status-critical)" />
+          <DetailRow label="Above 52W low" value={pctCell(row.fromLow52wPct).text} color="var(--status-good)" />
+          <DetailRow label="EMA 20 / 50 / 200"
+            value={`${num(row.ema20, 0)} / ${num(row.ema50, 0)} / ${num(row.ema200, 0)}`} />
+          {row.support != null && <DetailRow label="Support" value={fmtPrice(row.support)} />}
+          {row.resistance != null && <DetailRow label="Resistance" value={fmtPrice(row.resistance)} />}
+          <DetailRow label="Volume vs 20D avg" value={`${num(row.volumeRatio, 2)}×`} />
+        </div>
+
+        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <h4 className="mb-2 text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Patterns detected ({row.patternCount ?? 0})
+          </h4>
+          {(row.patterns ?? []).length === 0 ? (
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              None of the detectors passed its structural tests on this chart. No pattern has been
+              forced onto it to fill the column.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {(row.patterns ?? []).map((p) => (
+                <div key={p.patternType}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{p.patternName}</span>
+                    <span className="tabular shrink-0 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      {num(p.confidence, 1)}/10 · {p.confirmation}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    {p.explanation}
+                  </p>
+                  {p.riskReward != null && (
+                    <p className="tabular mt-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      breakout {fmtPrice(p.breakoutLevel)} · stop {fmtPrice(p.stopLoss)} · target {fmtPrice(p.target)} · R:R {num(p.riskReward, 1)}:1
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <p className="mt-4 text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+        A large decline is a reason to look, not a reason to buy. These are the measurements behind
+        the status — not a prediction that any of them will produce a return.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Index 500 sector-wise analysis.
+ *
+ * <p>The tab is built around one workflow, in order: choose a sector, rank what has fallen inside
+ * it over six months, then narrow to the names showing a technically confirmed reversal or
+ * breakout pattern.
+ *
+ * <p>Changing a filter re-queries {@code /api/index500/analysis} rather than filtering in the
+ * browser. That endpoint runs over the scan already held in server memory and never re-fetches a
+ * bar, so the round trip costs nothing — and it keeps one definition of every threshold, which a
+ * second client-side implementation of the same predicates would quietly let drift.
+ */
+function Index500View({ summary, scanning, progress, scanError, loadError, onScan, queued }) {
+  const [filters, setFilters] = useState(INDEX500_EMPTY_FILTERS)
+  const [result, setResult] = useState(null)
+  const [queryError, setQueryError] = useState(null)
+  const [querying, setQuerying] = useState(false)
+  const [sectorSummary, setSectorSummary] = useState(null)
+  const [patterns, setPatterns] = useState({})
+  const [expanded, setExpanded] = useState(null)
+
+  const hasRun = !!summary
+  // Every derived query keys off this, so a re-analysis refreshes the table and the heatmap
+  // without the tab needing to know a scan happened.
+  const generatedAt = summary?.generatedAt ?? null
+
+  useEffect(() => {
+    fetch('/api/index500/patterns')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setPatterns(d?.patterns ?? {}))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!hasRun) return undefined
+    let cancelled = false
+    fetch('/api/index500/sector-summary')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) setSectorSummary(d?.sectors ?? null) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [hasRun, generatedAt])
+
+  // Debounced, so typing "15" into a threshold is one query rather than two.
+  useEffect(() => {
+    if (!hasRun) return undefined
+    let cancelled = false
+    const timer = setTimeout(() => {
+      const q = new URLSearchParams()
+      if (filters.sector !== 'ALL') q.set('sector', filters.sector)
+      if (filters.pattern !== 'ALL') q.set('pattern', filters.pattern)
+      if (filters.minDrop !== '') q.set('minDrop', filters.minDrop)
+      if (filters.minRsi !== '') q.set('minRsi', filters.minRsi)
+      if (filters.maxRsi !== '') q.set('maxRsi', filters.maxRsi)
+      if (filters.minVolumeRatio !== '') q.set('minVolumeRatio', filters.minVolumeRatio)
+      q.set('sortBy', filters.sortBy)
+      setQuerying(true)
+      fetch(`/api/index500/analysis?${q}`)
+        .then(async (r) => {
+          const body = await r.json().catch(() => ({}))
+          if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`)
+          return body
+        })
+        .then((d) => { if (!cancelled) { setResult(d); setQueryError(null) } })
+        .catch((e) => { if (!cancelled) setQueryError(e.message) })
+        .finally(() => { if (!cancelled) setQuerying(false) })
+    }, 200)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [hasRun, generatedAt, filters])
+
+  const set = (patch) => setFilters({ ...filters, ...patch })
+  const rows = result?.stocks ?? []
+
+  if (!hasRun) {
+    return (
+      <ScanPending
+        scanning={scanning}
+        progress={progress}
+        error={scanError ?? loadError}
+        onScan={onScan}
+        what="Index 500 Analysis"
+        queued={queued}
+        queuedBehind="another scan"
+        description="Ranks every sector by six-month performance, then finds which fallen stocks inside them are showing a confirmed reversal or breakout pattern."
+      />
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {result ? `${result.matched} of ${result.universeSize} stocks match` : 'Loading…'}
+          {result?.unavailableCount > 0 ? ` · ${result.unavailableCount} without usable data` : ''}
+          {generatedAt ? ` · analysed ${new Date(generatedAt).toLocaleString()}` : ''}
+        </p>
+        <div className="flex flex-col items-end gap-1">
+          <button onClick={onScan} disabled={scanning}
+            className="flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-60"
+            style={{ borderColor: 'var(--btn-scan-border)', background: 'var(--btn-scan-bg)', color: 'var(--text-primary)' }}>
+            <span className={scanning ? 'inline-block animate-spin' : 'inline-block'}>&#8635;</span>
+            {scanning ? 'Analysing…' : 'Re-analyse'}
+          </button>
+          {scanning && progress && <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{progress}</span>}
+          {scanError && <span className="max-w-xs text-right text-xs" style={{ color: 'var(--status-serious)' }}>{scanError}</span>}
+        </div>
+      </div>
+
+      <SectorHeatmap sectors={sectorSummary} selected={filters.sector} onSelect={(s) => set({ sector: s })} />
+
+      {result && (
+        <div className="mb-5 flex flex-wrap gap-3">
+          <StatTile label="Matching" value={result.matched} />
+          <StatTile label="Down over 6M" value={result.declinerCount} color="var(--status-critical)" />
+          <StatTile label="Showing a pattern" value={result.patternCount} color="var(--accent)" />
+          <StatTile label="Reversals" value={result.reversalCount} color="var(--status-good)" />
+          <StatTile label="Breakouts" value={result.breakoutCount} color="var(--status-good)" />
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-end gap-x-4 gap-y-3 rounded-xl border p-3"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Sector</span>
+          <select value={filters.sector} onChange={(e) => set({ sector: e.target.value })}
+            className="max-w-[13rem] rounded-lg border px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+            <option value="ALL">All sectors</option>
+            {(sectorSummary ?? []).map((s) => (
+              <option key={s.sector} value={s.sector}>{s.sector} ({s.stocks})</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Pattern</span>
+          <select value={filters.pattern} onChange={(e) => set({ pattern: e.target.value })}
+            className="max-w-[13rem] rounded-lg border px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+            <option value="ALL">All patterns</option>
+            {Object.entries(patterns).map(([type, label]) => (
+              <option key={type} value={type}>{label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Min drop %</span>
+          <input type="number" value={filters.minDrop} onChange={(e) => set({ minDrop: e.target.value })}
+            placeholder="any" className="tabular w-20 rounded-lg border px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>RSI range</span>
+          <span className="flex items-center gap-1">
+            <input type="number" value={filters.minRsi} onChange={(e) => set({ minRsi: e.target.value })}
+              placeholder="min" className="tabular w-16 rounded-lg border px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>–</span>
+            <input type="number" value={filters.maxRsi} onChange={(e) => set({ maxRsi: e.target.value })}
+              placeholder="max" className="tabular w-16 rounded-lg border px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+          </span>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Min volume ×</span>
+          <input type="number" step="0.1" value={filters.minVolumeRatio}
+            onChange={(e) => set({ minVolumeRatio: e.target.value })}
+            placeholder="any" className="tabular w-20 rounded-lg border px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Rank by</span>
+          <select value={filters.sortBy} onChange={(e) => set({ sortBy: e.target.value })}
+            className="rounded-lg border px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+            {INDEX500_SORTS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+        </label>
+
+        <button onClick={() => setFilters(INDEX500_EMPTY_FILTERS)}
+          className="ml-auto rounded-lg border px-3 py-1.5 text-xs font-semibold"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}>
+          Reset filters
+        </button>
+      </div>
+
+      {queryError && <p className="mb-3 text-sm" style={{ color: 'var(--status-serious)' }}>{queryError}</p>}
+
+      <div className="overflow-hidden rounded-xl border"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', opacity: querying ? 0.6 : 1 }}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[66rem] text-sm">
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--gridline)' }}>
+                {INDEX500_COLUMNS.map(([h, align]) => (
+                  <th key={h}
+                    className={`px-2 py-3 text-xs font-semibold uppercase tracking-wide text-${align}`}
+                    style={{ color: 'var(--text-muted)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const d1 = pctCell(row.return1dPct)
+                const m1 = pctCell(row.return1mPct)
+                const m3 = pctCell(row.return3mPct)
+                const m6 = pctCell(row.return6mPct)
+                const y1 = pctCell(row.return1yPct)
+                return (
+                  <Fragment key={row.symbol}>
+                    <tr onClick={() => setExpanded(expanded === row.symbol ? null : row.symbol)}
+                      className="cursor-pointer transition-colors"
+                      style={{ borderTop: '1px solid var(--gridline)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                      <td className="tabular px-2 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{row.rank}</td>
+                      {/* The widest discretionary column, so it absorbs the space the extra return
+                          column needs. The symbol below identifies the row when the name truncates,
+                          and the title attribute gives the full name on hover. */}
+                      <td className="px-2 py-2.5" title={row.companyName}>
+                        <div className="max-w-[6.5rem] truncate font-medium" style={{ color: 'var(--text-primary)' }}>
+                          {row.companyName}
+                        </div>
+                        <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{row.symbol}</div>
+                      </td>
+                      <td className="max-w-[5.5rem] truncate px-2 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {row.sector}
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>
+                        {row.analysed ? fmtPrice(row.price) : '—'}
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: d1.color }}>{d1.text}</td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: m1.color }}>{m1.text}</td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: m3.color }}>{m3.text}</td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs font-semibold" style={{ color: m6.color }}>{m6.text}</td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: y1.color }}>{y1.text}</td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {row.declineRank ?? '—'}
+                      </td>
+                      <td className="max-w-[6.5rem] px-2 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        <span className="block truncate">{row.patternName ?? '—'}</span>
+                        {row.patternCount > 1 && (
+                          <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                            +{row.patternCount - 1} more
+                          </span>
+                        )}
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {row.analysed ? num(row.rsi, 0) : '—'}
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {row.analysed ? num(row.adx, 0) : '—'}
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {row.analysed ? `${num(row.volumeRatio, 1)}×` : '—'}
+                      </td>
+                      <td className="px-2 py-2.5 text-[11px] leading-tight" style={{ color: 'var(--text-muted)' }}>{row.emaStatus ?? '—'}</td>
+                      <td className="px-2 py-2.5">
+                        {row.analysed && (
+                          <span className="tabular rounded px-1.5 py-0.5 text-xs font-semibold"
+                            style={{ background: 'var(--accent-wash)', color: 'var(--accent)' }}>
+                            {num(row.score, 0)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2.5"><Index500StatusBadge status={row.status} /></td>
+                    </tr>
+                    {expanded === row.symbol && row.analysed && (
+                      <tr><td colSpan={INDEX500_COLUMNS.length} className="p-0"><Index500Detail row={row} /></td></tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+              {rows.length === 0 && !querying && (
+                <tr>
+                  <td colSpan={INDEX500_COLUMNS.length} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                    Nothing matches these filters. Try a smaller minimum drop, a wider RSI range, or
+                    clearing the pattern.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {result && result.returned < result.matched && (
+        <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+          Showing the top {result.returned} of {result.matched} matches.
+        </p>
+      )}
+    </>
+  )
+}
+
 const VIEW_TITLES = {
   dashboard: 'Dashboard',
   bullish: 'Bullish Stocks',
+  index500: 'Index 500 Analysis',
   intraday: 'Intraday Scanner',
   reversal: 'Reversal Watch',
   lookup: 'My Watchlist',
@@ -3533,6 +4376,7 @@ const VIEW_SUBTITLES = {
   intraday: 'Two strategies over the same intraday candles — bullish continuation, and overbought reversal.',
   reversal: 'Candlestick-confirmed reversal setups in beaten-down Nifty 500 names.',
   lookup: 'Symbols you follow, scored by the same 100-point bullish assessment as the ranked table.',
+  index500: 'Sector by sector, then stock by stock: which sectors have fallen hardest over six months, and which names inside them are showing a confirmed reversal or breakout.',
   bullish: 'Nifty 500 ranked on trend, relative strength, momentum, volume, price structure, pattern quality, breakout quality and risk/reward.',
   journal: 'Your delivery/swing trade log, auto-calculated performance dashboard, and 1:2 R:R calculator.',
   expenses: 'Salary, EMIs and fixed costs month by month — and what that adds up to over a year.',
@@ -3574,9 +4418,19 @@ export default function App() {
   const [intradayInterval, setIntradayInterval] = useState('15m')
   const intradayPollRef = useRef(null)
 
+  // The Index 500 analysis keeps only a summary here — one row plus the aggregate counts. The tab
+  // queries the full table itself with whatever filters are set, and the dashboard needs nothing
+  // more than the counts, so holding 500 rows in the shell would be carrying them for no reader.
+  const [index500Summary, setIndex500Summary] = useState(null)
+  const [index500Error, setIndex500Error] = useState(null)
+  const [index500Scanning, setIndex500Scanning] = useState(false)
+  const [index500Progress, setIndex500Progress] = useState(null)
+  const [index500ScanError, setIndex500ScanError] = useState(null)
+  const index500PollRef = useRef(null)
+
   // One auto-start per feature per session. Without this a scan that fails would be retried on
   // every re-render that lands on its tab, which is a request loop rather than a retry.
-  const autoStarted = useRef({ reversal: false, bullish: false, intraday: false })
+  const autoStarted = useRef({ reversal: false, bullish: false, intraday: false, index500: false })
 
   function loadResults() {
     return fetch('/api/results')
@@ -3705,6 +4559,65 @@ export default function App() {
     }
   }
 
+  /**
+   * The aggregate view of the last analysis.
+   *
+   * <p>{@code limit=1} deliberately: this call exists to answer "has it run, and what did it find",
+   * which the summary counts already carry. Pulling the whole table here would fetch 250 rows the
+   * shell never renders, and the tab re-queries with its own filters anyway.
+   */
+  function loadIndex500() {
+    return fetch('/api/index500/analysis?limit=1&includeUnavailable=true')
+      .then((r) => {
+        if (r.status === 404) throw new Error('no-analysis-yet')
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((d) => { setIndex500Summary(d); setIndex500Error(null) })
+  }
+
+  useEffect(() => {
+    loadIndex500().catch((e) => setIndex500Error(e.message))
+    return () => clearInterval(index500PollRef.current)
+  }, [])
+
+  async function runIndex500Scan() {
+    if (index500Scanning) return
+    setIndex500ScanError(null)
+    setIndex500Scanning(true)
+    setIndex500Progress('Starting analysis…')
+    try {
+      const res = await fetch('/api/index500/scan', { method: 'POST' })
+      if (res.status !== 202 && res.status !== 409) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      index500PollRef.current = setInterval(async () => {
+        try {
+          const st = await fetch('/api/index500/status').then((r) => r.json())
+          if (st.running) {
+            setIndex500Progress(st.progress ?? 'Analysing…')
+            return
+          }
+          clearInterval(index500PollRef.current)
+          if (st.lastResult?.error) setIndex500ScanError(st.lastResult.error)
+          else await loadIndex500().catch((e) => setIndex500Error(e.message))
+          setIndex500Scanning(false)
+          setIndex500Progress(null)
+        } catch (e) {
+          clearInterval(index500PollRef.current)
+          setIndex500Scanning(false)
+          setIndex500Progress(null)
+          setIndex500ScanError(e.message || 'Lost connection to the API server')
+        }
+      }, 1500)
+    } catch (e) {
+      setIndex500Scanning(false)
+      setIndex500Progress(null)
+      setIndex500ScanError(e.message || 'Could not reach the API server')
+    }
+  }
+
   async function refreshAll() {
     if (refreshing) return
     setRefreshError(null)
@@ -3785,7 +4698,7 @@ export default function App() {
     // costs nothing, because the first scan fills the shared bar cache and the second then
     // completes in seconds. These flags are effect dependencies, so the queued scan starts on its
     // own the moment the running one finishes.
-    const busy = refreshing || bullishScanning || intradayScanning
+    const busy = refreshing || bullishScanning || intradayScanning || index500Scanning
 
     if (view === 'reversal' && !data && !busy && !autoStarted.current.reversal) {
       autoStarted.current.reversal = true
@@ -3799,8 +4712,13 @@ export default function App() {
       autoStarted.current.intraday = true
       runIntradayScan(intradayInterval)
     }
+    if (view === 'index500' && !index500Summary && !busy && !autoStarted.current.index500) {
+      autoStarted.current.index500 = true
+      runIndex500Scan()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, data, bullishData, intradayData, refreshing, bullishScanning, intradayScanning])
+  }, [view, data, bullishData, intradayData, index500Summary, refreshing, bullishScanning,
+      intradayScanning, index500Scanning])
 
   // No full-screen gate any more. Every view renders inside the same shell and handles its own
   // empty state, so the tab row, the header and the dashboard stay reachable at all times — the
@@ -3917,6 +4835,7 @@ export default function App() {
             reversal={{ data, scanning: refreshing, progress: refreshProgress }}
             bullish={{ data: bullishData, scanning: bullishScanning, progress: bullishProgress }}
             intraday={{ data: intradayData, scanning: intradayScanning, progress: intradayProgress }}
+            index500={{ data: index500Summary, scanning: index500Scanning, progress: index500Progress }}
             watchlistCount={customRows.length}
             onOpen={setView}
           />
@@ -3933,6 +4852,18 @@ export default function App() {
             queued={refreshing || bullishScanning}
             interval={intradayInterval}
             onIntervalChange={setIntradayInterval}
+          />
+        )}
+
+        {view === 'index500' && (
+          <Index500View
+            summary={index500Summary}
+            scanning={index500Scanning}
+            progress={index500Progress}
+            scanError={index500ScanError}
+            loadError={index500Error && index500Error !== 'no-analysis-yet' ? index500Error : null}
+            onScan={runIndex500Scan}
+            queued={refreshing || bullishScanning || intradayScanning}
           />
         )}
 
