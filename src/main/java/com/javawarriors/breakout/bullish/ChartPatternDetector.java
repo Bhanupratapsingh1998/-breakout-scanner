@@ -125,7 +125,7 @@ public final class ChartPatternDetector {
      * pole's, and volume must be lighter in the flag than in the pole. A deep or noisy pullback on
      * heavy volume is a failed advance, and is rejected here.
      */
-    static ChartPattern bullFlag(IndicatorSnapshot s, BullishConfig cfg) {
+    public static ChartPattern bullFlag(IndicatorSnapshot s, BullishConfig cfg) {
         int n = s.n;
         ChartPattern best = null;
 
@@ -187,7 +187,7 @@ public final class ChartPatternDetector {
      * span. A low at the very start or end is a V-shaped drop or a straight recovery, both of
      * which behave differently from a cup and neither of which is accepted here.
      */
-    static ChartPattern cupAndHandle(IndicatorSnapshot s, BullishConfig cfg) {
+    public static ChartPattern cupAndHandle(IndicatorSnapshot s, BullishConfig cfg) {
         int n = s.n;
         List<Integer> highs = s.swingHighs;
         if (highs.size() < 2) return ChartPattern.none();
@@ -260,7 +260,7 @@ public final class ChartPatternDetector {
      * nearby lows in a sideways drift qualify, and a double bottom whose neckline is 2% overhead
      * has no measured move worth trading.
      */
-    static ChartPattern doubleBottom(IndicatorSnapshot s, BullishConfig cfg) {
+    public static ChartPattern doubleBottom(IndicatorSnapshot s, BullishConfig cfg) {
         int n = s.n;
         List<Integer> lows = s.swingLows;
         if (lows.size() < 2) return ChartPattern.none();
@@ -320,7 +320,7 @@ public final class ChartPatternDetector {
      * last low materially above the first. Rising lows alone are just an uptrend; the flat ceiling
      * is what makes it a triangle.
      */
-    static ChartPattern ascendingTriangle(IndicatorSnapshot s, BullishConfig cfg) {
+    public static ChartPattern ascendingTriangle(IndicatorSnapshot s, BullishConfig cfg) {
         int n = s.n;
         ChartPattern best = null;
 
@@ -383,7 +383,7 @@ public final class ChartPatternDetector {
      * universe: a flat base is a pause in a move, and without a move before it the same tight
      * range is just a stock nobody is trading.
      */
-    static ChartPattern flatBase(IndicatorSnapshot s, BullishConfig cfg) {
+    public static ChartPattern flatBase(IndicatorSnapshot s, BullishConfig cfg) {
         int n = s.n;
         ChartPattern best = null;
         double sixMonthHigh = s.highestHigh(IndicatorSnapshot.BARS_6M);
@@ -437,7 +437,7 @@ public final class ChartPatternDetector {
      * a breakout must clear the higher peak, never a line sloping down beneath it - and it keeps
      * the level a real price that appears on the chart.
      */
-    static ChartPattern inverseHeadAndShoulders(IndicatorSnapshot s, BullishConfig cfg) {
+    public static ChartPattern inverseHeadAndShoulders(IndicatorSnapshot s, BullishConfig cfg) {
         int n = s.n;
         final int from = n - 180;
         List<Integer> lows = s.swingLows.stream().filter(i -> i >= from).toList();

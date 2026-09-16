@@ -132,9 +132,21 @@ public final class BullishStockAnalyzer {
         String body = String.join(", ", parts);
         String sentence = Character.toUpperCase(body.charAt(0)) + body.substring(1) + ".";
 
-        if (!over.isClean()) sentence += " " + over.explanation();
-        if (!setup.tradeable()) sentence += " " + setup.reason();
+        sentence = append(sentence, over.isClean() ? null : over.explanation());
+        sentence = append(sentence, setup.tradeable() ? null : setup.reason());
         return sentence;
+    }
+
+    /**
+     * Adds a clause unless the sentence already carries it.
+     *
+     * <p>For an overextended stock the two clauses below are the same text - the setup stage takes
+     * its reason from the overextension reading - so appending both printed the sentence twice in a
+     * row, which reads as a bug rather than as emphasis.
+     */
+    private static String append(String sentence, String clause) {
+        if (clause == null || clause.isBlank() || sentence.contains(clause)) return sentence;
+        return sentence + " " + clause;
     }
 
     /** "a" or "an" for a pattern name. Only the vowel rule is needed - every name here is plain. */
