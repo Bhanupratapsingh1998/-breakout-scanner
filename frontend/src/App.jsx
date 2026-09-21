@@ -188,7 +188,7 @@ function FilterPill({ active, onClick, children }) {
 /** The Dashboard / Bullish Stocks / Reversal Watch / My Watchlist / Trade Journal tab row —
  *  shared by the main app shell AND the "no scan data yet" / "loading" screens, so every tab is
  *  reachable from anywhere, not just after a scan has completed. */
-function ViewTabs({ view, setView, reversalCount, watchlistCount = 0, intradayCount = 0 }) {
+function ViewTabs({ view, setView, reversalCount, watchlistCount = 0 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       <FilterPill active={view === 'dashboard'} onClick={() => setView('dashboard')}>
@@ -199,9 +199,6 @@ function ViewTabs({ view, setView, reversalCount, watchlistCount = 0, intradayCo
       </FilterPill>
       <FilterPill active={view === 'index500'} onClick={() => setView('index500')}>
         Index 500 Analysis
-      </FilterPill>
-      <FilterPill active={view === 'intraday'} onClick={() => setView('intraday')}>
-        Intraday Scanner{intradayCount > 0 ? ` (${intradayCount})` : ''}
       </FilterPill>
       <FilterPill active={view === 'reversal'} onClick={() => setView('reversal')}>
         Reversal Watch{reversalCount > 0 ? ` (${reversalCount})` : ''}
@@ -2270,305 +2267,6 @@ function BullishStocksView({ data, scanning, progress, scanError, loadError, onS
   )
 }
 
-const INTRADAY_INTERVALS = ['5m', '15m', '60m']
-
-const INTRADAY_SIDES = [
-  { key: 'bullish', label: 'Bullish', accent: 'var(--status-good)' },
-  { key: 'reversal', label: 'Reversal', accent: 'var(--status-critical)' },
-]
-
-function signedCell(pct, digits = 1) {
-  if (pct == null || Number.isNaN(pct)) return { text: '—', color: 'var(--text-muted)' }
-  return {
-    text: `${pct >= 0 ? '+' : ''}${Number(pct).toFixed(digits)}%`,
-    color: pct >= 0 ? 'var(--status-good)' : 'var(--status-critical)',
-  }
-}
-
-/** The expanded row: why this candle fired, and the readings behind it. */
-function IntradayDetail({ row, side }) {
-  const accent = side === 'bullish' ? 'var(--status-good)' : 'var(--status-critical)'
-  return (
-    <div className="border-t px-4 py-4" style={{ borderColor: 'var(--gridline)', background: 'var(--page-plane)' }}>
-      <p className="mb-4 max-w-4xl text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-        {row.explanation}
-      </p>
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-            Candle
-          </h4>
-          <div className="mb-1.5 text-sm font-semibold" style={{ color: accent }}>{row.pattern.name}</div>
-          <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            {row.pattern.description}
-          </p>
-          <div className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Strength {row.pattern.strength}/3 · signal score {num(row.score, 1)}/10
-          </div>
-        </div>
-
-        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-            Levels
-          </h4>
-          <DetailRow label="Price" value={fmtPrice(row.price)} />
-          <DetailRow label="EMA" value={fmtPrice(row.ema)} />
-          <DetailRow label="VWAP" value={Number.isNaN(row.vwap) || row.vwap == null ? '—' : fmtPrice(row.vwap)} />
-          <DetailRow label="Distance from EMA" value={signedCell(row.distanceFromEmaPct).text}
-            color={signedCell(row.distanceFromEmaPct).color} />
-          <DetailRow label="Distance from VWAP" value={signedCell(row.distanceFromVwapPct).text}
-            color={signedCell(row.distanceFromVwapPct).color} />
-        </div>
-
-        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-            Momentum & participation
-          </h4>
-          <DetailRow label="RSI(14)" value={num(row.rsi, 1)} />
-          <DetailRow label="Volume vs average" value={`${num(row.volumeRatio, 2)}×`} />
-          <DetailRow label="Candle change" value={signedCell(row.changePct, 2).text}
-            color={signedCell(row.changePct, 2).color} />
-          <DetailRow label="Previous close" value={fmtPrice(row.previousClose)} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
- * The Intraday Scanner: two strategies over the same candles, shown as sub-tabs.
- *
- * <p>One scan feeds both sides. Each symbol's intraday series is fetched once and both strategies
- * are evaluated on it, so splitting Bullish and Reversal into separate scans would double the work
- * to answer the same question - they are two readings of one dataset, not two datasets.
- */
-function IntradayView({ data, scanning, progress, scanError, loadError, onScan, queued, interval, onIntervalChange }) {
-  const [side, setSide] = useState('bullish')
-  const [pattern, setPattern] = useState('ALL')
-  const [query, setQuery] = useState('')
-  const [expanded, setExpanded] = useState(null)
-
-  // The pattern filter belongs to whichever side is showing — the two vocabularies are disjoint.
-  useEffect(() => { setPattern('ALL'); setExpanded(null) }, [side])
-
-  const rows = useMemo(() => {
-    const all = data?.[side] ?? []
-    let r = all
-    if (pattern !== 'ALL') r = r.filter((x) => x.patternType === pattern)
-    if (query.trim()) {
-      const q = query.trim().toUpperCase()
-      r = r.filter((x) => x.symbol.toUpperCase().includes(q) || (x.name ?? '').toUpperCase().includes(q))
-    }
-    return r
-  }, [data, side, pattern, query])
-
-  // Only patterns that actually fired, so the dropdown never offers an empty filter.
-  const patternOptions = useMemo(() => {
-    const vocabulary = (side === 'bullish' ? data?.bullishPatterns : data?.reversalPatterns) ?? {}
-    const present = new Set((data?.[side] ?? []).map((x) => x.patternType))
-    return Object.entries(vocabulary)
-      .filter(([type]) => present.has(type))
-      .sort((a, b) => a[1].localeCompare(b[1]))
-  }, [data, side])
-
-  if (!data) {
-    return (
-      <div className="mx-auto max-w-md rounded-2xl border p-8 text-center"
-        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', boxShadow: 'var(--shadow-md)' }}>
-        {queued && !scanning ? (
-          <>
-            <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
-            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Queued</p>
-            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              Waiting for the running scan to finish, then the intraday scan starts automatically.
-            </p>
-          </>
-        ) : scanning ? (
-          <>
-            <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
-            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-              Scanning intraday candles…
-            </p>
-            <p className="tabular mx-auto mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>{progress ?? 'Starting…'}</p>
-            <p className="mx-auto mt-3 max-w-xs text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              Intraday candles are a separate series from the daily scans, so this pass fetches the
-              universe again. You can switch tabs while it finishes.
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="mx-auto w-fit"><LogoBadge size={48} /></div>
-            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {scanError || loadError ? 'Could not run the intraday scan' : 'Intraday scan has not run yet'}
-            </p>
-            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              {scanError || loadError
-                || 'Scans the Nifty 500 on intraday candles for bullish continuation setups and overbought reversals.'}
-            </p>
-            <button onClick={() => onScan(interval)}
-              className="mt-6 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-              style={{ background: 'var(--accent)' }}>
-              {scanError ? 'Try again' : 'Run intraday scan'}
-            </button>
-          </>
-        )}
-      </div>
-    )
-  }
-
-  const strategy = data.strategy?.[side]
-  const accent = INTRADAY_SIDES.find((s) => s.key === side).accent
-
-  return (
-    <>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {data.analyzedCount} of {data.universeSize} scanned on {data.interval} candles
-          {data.latestCandleTime
-            ? ` · last candle ${new Date(data.latestCandleTime * 1000).toLocaleString()}`
-            : ''}
-        </p>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-              Candle
-            </span>
-            <select value={interval} onChange={(e) => onIntervalChange(e.target.value)}
-              className="rounded-lg border px-2 py-1.5 text-xs" style={inputStyle}>
-              {INTRADAY_INTERVALS.map((iv) => <option key={iv} value={iv}>{iv}</option>)}
-            </select>
-            <button onClick={() => onScan(interval)} disabled={scanning}
-              className="flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-60"
-              style={{ borderColor: 'var(--btn-scan-border)', background: 'var(--btn-scan-bg)', color: 'var(--text-primary)' }}>
-              <span className={scanning ? 'inline-block animate-spin' : 'inline-block'}>&#8635;</span>
-              {scanning ? 'Scanning…' : 'Rescan'}
-            </button>
-          </div>
-          {scanning && progress && <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{progress}</span>}
-          {scanError && <span className="text-xs" style={{ color: 'var(--status-serious)' }}>{scanError}</span>}
-        </div>
-      </div>
-
-      {/* The two strategies, as sub-tabs. */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {INTRADAY_SIDES.map((s) => {
-          const count = data[s.key]?.length ?? 0
-          const active = side === s.key
-          return (
-            <button key={s.key} onClick={() => setSide(s.key)}
-              className="rounded-lg border px-4 py-2 text-sm font-semibold transition-colors"
-              style={active
-                ? { background: s.accent, borderColor: s.accent, color: '#fff' }
-                : { background: 'var(--surface-1)', borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-              {s.label}{count > 0 ? ` (${count})` : ''}
-            </button>
-          )
-        })}
-      </div>
-
-      {strategy && (
-        <div className="mb-4 rounded-xl border px-4 py-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-          <div className="flex items-start gap-2">
-            <Dot color={accent} size={8} />
-            <div>
-              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-                Strategy
-              </span>
-              <p className="mt-0.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{strategy}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="mb-6 flex flex-wrap gap-3">
-        <StatTile label="Signals" value={data[side]?.length ?? 0} color={accent} />
-        <StatTile label="Showing" value={rows.length} />
-        <StatTile label="Patterns firing" value={patternOptions.length} />
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
-        <label className="flex items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Pattern</span>
-          <select value={pattern} onChange={(e) => setPattern(e.target.value)}
-            className="max-w-[14rem] rounded-lg border px-2 py-1.5 text-xs" style={inputStyle}>
-            <option value="ALL">All patterns</option>
-            {patternOptions.map(([type, label]) => <option key={type} value={type}>{label}</option>)}
-          </select>
-        </label>
-        <input value={query} onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search name or symbol…"
-          className="ml-auto w-52 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2"
-          style={{ ...inputStyle, '--tw-ring-color': 'var(--accent)' }} />
-      </div>
-
-      <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[58rem] text-sm">
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--gridline)' }}>
-                {['#', 'Stock', 'Score', 'Pattern', 'Price', 'Candle', 'RSI', 'vs EMA', 'vs VWAP', 'Vol']
-                  .map((h, i) => (
-                    <th key={h} className={`px-3 py-3 text-xs font-semibold uppercase tracking-wide ${i >= 4 ? 'text-right' : 'text-left'}`}
-                      style={{ color: 'var(--text-muted)' }}>{h}</th>
-                  ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const chg = signedCell(row.changePct, 2)
-                const ema = signedCell(row.distanceFromEmaPct)
-                const vwap = signedCell(row.distanceFromVwapPct)
-                return (
-                  <Fragment key={row.symbol}>
-                    <tr onClick={() => setExpanded(expanded === row.symbol ? null : row.symbol)}
-                      className="cursor-pointer transition-colors"
-                      style={{ borderTop: '1px solid var(--gridline)' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                      <td className="tabular px-3 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{row.rank}</td>
-                      <td className="px-3 py-2.5">
-                        <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{row.name ?? row.symbol}</div>
-                        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{row.symbol}</div>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className="tabular rounded px-1.5 py-0.5 text-xs font-semibold"
-                          style={{ background: 'var(--accent-wash)', color: 'var(--accent)' }}>
-                          {num(row.score, 1)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-xs" style={{ color: accent }}>{row.patternName}</td>
-                      <td className="tabular px-3 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>{fmtPrice(row.price)}</td>
-                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: chg.color }}>{chg.text}</td>
-                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>{num(row.rsi, 0)}</td>
-                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: ema.color }}>{ema.text}</td>
-                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: vwap.color }}>{vwap.text}</td>
-                      <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>{num(row.volumeRatio, 1)}×</td>
-                    </tr>
-                    {expanded === row.symbol && (
-                      <tr>
-                        <td colSpan={10} className="p-0"><IntradayDetail row={row} side={side} /></td>
-                      </tr>
-                    )}
-                  </Fragment>
-                )
-              })}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
-                    {(data[side]?.length ?? 0) === 0
-                      ? `No ${side} setups fired on the last ${data.interval} candle.`
-                      : 'No stocks match this filter.'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
-  )
-}
-
 const inr = (n) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 
 /** Signed money, with the minus inside the currency rather than before it. */
@@ -3641,7 +3339,7 @@ function TopSetups({ stocks, onOpen }) {
  * is what starts that scan. The previous behaviour — a full-screen "No scan data yet" wall in front
  * of the entire app — made the first five minutes of every cold start show nothing at all.
  */
-function DashboardView({ reversal, bullish, intraday, index500, watchlistCount, onOpen }) {
+function DashboardView({ reversal, bullish, index500, watchlistCount, onOpen }) {
   const [regime, setRegime] = useState(null)
   const [regimeError, setRegimeError] = useState(null)
   const [money, setMoney] = useState(null)
@@ -3749,19 +3447,6 @@ function DashboardView({ reversal, bullish, intraday, index500, watchlistCount, 
             { label: 'Buy now', value: bullish.data.buyNowCount, color: 'var(--status-good)' },
           ] : null}
           onOpen={() => onOpen('bullish')}
-        />
-
-        <FeatureCard
-          title="Intraday Scanner"
-          description="Two strategies over the same intraday candles: bullish continuation above EMA and VWAP, and overbought reversals rejecting a rally."
-          state={intraday.scanning ? 'running' : intraday.data ? 'ready' : 'idle'}
-          accent="var(--cat-nifty500)"
-          detail={intraday.scanning ? (intraday.progress ?? 'Scanning') : undefined}
-          metrics={intraday.data ? [
-            { label: 'Bullish', value: intraday.data.bullishCount, color: 'var(--status-good)' },
-            { label: 'Reversal', value: intraday.data.reversalCount, color: 'var(--status-critical)' },
-          ] : null}
-          onOpen={() => onOpen('intraday')}
         />
 
         <FeatureCard
@@ -4364,7 +4049,6 @@ const VIEW_TITLES = {
   dashboard: 'Dashboard',
   bullish: 'Bullish Stocks',
   index500: 'Index 500 Analysis',
-  intraday: 'Intraday Scanner',
   reversal: 'Reversal Watch',
   lookup: 'My Watchlist',
   journal: 'Trade Journal',
@@ -4373,7 +4057,6 @@ const VIEW_TITLES = {
 
 const VIEW_SUBTITLES = {
   dashboard: 'Market regime, and where each scanner stands. Opening a tab starts its scan.',
-  intraday: 'Two strategies over the same intraday candles — bullish continuation, and overbought reversal.',
   reversal: 'Candlestick-confirmed reversal setups in beaten-down Nifty 500 names.',
   lookup: 'Symbols you follow, scored by the same 100-point bullish assessment as the ranked table.',
   index500: 'Sector by sector, then stock by stock: which sectors have fallen hardest over six months, and which names inside them are showing a confirmed reversal or breakout.',
@@ -4408,16 +4091,6 @@ export default function App() {
   const [bullishScanError, setBullishScanError] = useState(null)
   const bullishPollRef = useRef(null)
 
-  // The intraday scan runs on a different candle series from the two daily scans, so it keeps its
-  // own state and cannot reuse their cached bars.
-  const [intradayData, setIntradayData] = useState(null)
-  const [intradayError, setIntradayError] = useState(null)
-  const [intradayScanning, setIntradayScanning] = useState(false)
-  const [intradayProgress, setIntradayProgress] = useState(null)
-  const [intradayScanError, setIntradayScanError] = useState(null)
-  const [intradayInterval, setIntradayInterval] = useState('15m')
-  const intradayPollRef = useRef(null)
-
   // The Index 500 analysis keeps only a summary here — one row plus the aggregate counts. The tab
   // queries the full table itself with whatever filters are set, and the dashboard needs nothing
   // more than the counts, so holding 500 rows in the shell would be carrying them for no reader.
@@ -4430,7 +4103,7 @@ export default function App() {
 
   // One auto-start per feature per session. Without this a scan that fails would be retried on
   // every re-render that lands on its tab, which is a request loop rather than a retry.
-  const autoStarted = useRef({ reversal: false, bullish: false, intraday: false, index500: false })
+  const autoStarted = useRef({ reversal: false, bullish: false, index500: false })
 
   function loadResults() {
     return fetch('/api/results')
@@ -4503,59 +4176,6 @@ export default function App() {
       setBullishScanning(false)
       setBullishProgress(null)
       setBullishScanError(e.message || 'Could not reach the API server')
-    }
-  }
-
-  function loadIntraday() {
-    return fetch('/api/intraday')
-      .then((r) => {
-        if (r.status === 404) throw new Error('no-intraday-yet')
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
-      })
-      .then((d) => { setIntradayData(d); setIntradayError(null); setIntradayInterval(d.interval ?? '15m') })
-  }
-
-  useEffect(() => {
-    loadIntraday().catch((e) => setIntradayError(e.message))
-    return () => clearInterval(intradayPollRef.current)
-  }, [])
-
-  async function runIntradayScan(interval) {
-    if (intradayScanning) return
-    setIntradayScanError(null)
-    setIntradayScanning(true)
-    setIntradayProgress('Starting intraday scan…')
-    try {
-      const res = await fetch(`/api/intraday/scan?interval=${encodeURIComponent(interval ?? intradayInterval)}`,
-        { method: 'POST' })
-      if (res.status !== 202 && res.status !== 409) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error ?? `HTTP ${res.status}`)
-      }
-      intradayPollRef.current = setInterval(async () => {
-        try {
-          const st = await fetch('/api/intraday/status').then((r) => r.json())
-          if (st.running) {
-            setIntradayProgress(st.progress ?? 'Scanning…')
-            return
-          }
-          clearInterval(intradayPollRef.current)
-          if (st.lastResult?.error) setIntradayScanError(st.lastResult.error)
-          else await loadIntraday().catch((e) => setIntradayError(e.message))
-          setIntradayScanning(false)
-          setIntradayProgress(null)
-        } catch (e) {
-          clearInterval(intradayPollRef.current)
-          setIntradayScanning(false)
-          setIntradayProgress(null)
-          setIntradayScanError(e.message || 'Lost connection to the API server')
-        }
-      }, 1500)
-    } catch (e) {
-      setIntradayScanning(false)
-      setIntradayProgress(null)
-      setIntradayScanError(e.message || 'Could not reach the API server')
     }
   }
 
@@ -4698,7 +4318,7 @@ export default function App() {
     // costs nothing, because the first scan fills the shared bar cache and the second then
     // completes in seconds. These flags are effect dependencies, so the queued scan starts on its
     // own the moment the running one finishes.
-    const busy = refreshing || bullishScanning || intradayScanning || index500Scanning
+    const busy = refreshing || bullishScanning || index500Scanning
 
     if (view === 'reversal' && !data && !busy && !autoStarted.current.reversal) {
       autoStarted.current.reversal = true
@@ -4708,17 +4328,12 @@ export default function App() {
       autoStarted.current.bullish = true
       runBullishScan()
     }
-    if (view === 'intraday' && !intradayData && !busy && !autoStarted.current.intraday) {
-      autoStarted.current.intraday = true
-      runIntradayScan(intradayInterval)
-    }
     if (view === 'index500' && !index500Summary && !busy && !autoStarted.current.index500) {
       autoStarted.current.index500 = true
       runIndex500Scan()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, data, bullishData, intradayData, index500Summary, refreshing, bullishScanning,
-      intradayScanning, index500Scanning])
+  }, [view, data, bullishData, index500Summary, refreshing, bullishScanning, index500Scanning])
 
   // No full-screen gate any more. Every view renders inside the same shell and handles its own
   // empty state, so the tab row, the header and the dashboard stay reachable at all times — the
@@ -4748,7 +4363,7 @@ export default function App() {
             </p>
             <div className="mt-3">
               <ViewTabs view={view} setView={setView} reversalCount={data?.reversals?.length ?? 0}
-                watchlistCount={customRows.length} intradayCount={(intradayData ? (intradayData.bullishCount ?? 0) + (intradayData.reversalCount ?? 0) : 0)} />
+                watchlistCount={customRows.length} />
             </div>
           </div>
           {/* Only Reversal Watch is fed by this scan, so only it gets the button. The Bullish tab carries
@@ -4834,24 +4449,9 @@ export default function App() {
           <DashboardView
             reversal={{ data, scanning: refreshing, progress: refreshProgress }}
             bullish={{ data: bullishData, scanning: bullishScanning, progress: bullishProgress }}
-            intraday={{ data: intradayData, scanning: intradayScanning, progress: intradayProgress }}
             index500={{ data: index500Summary, scanning: index500Scanning, progress: index500Progress }}
             watchlistCount={customRows.length}
             onOpen={setView}
-          />
-        )}
-
-        {view === 'intraday' && (
-          <IntradayView
-            data={intradayData}
-            scanning={intradayScanning}
-            progress={intradayProgress}
-            scanError={intradayScanError}
-            loadError={intradayError && intradayError !== 'no-intraday-yet' ? intradayError : null}
-            onScan={runIntradayScan}
-            queued={refreshing || bullishScanning}
-            interval={intradayInterval}
-            onIntervalChange={setIntradayInterval}
           />
         )}
 
@@ -4863,7 +4463,7 @@ export default function App() {
             scanError={index500ScanError}
             loadError={index500Error && index500Error !== 'no-analysis-yet' ? index500Error : null}
             onScan={runIndex500Scan}
-            queued={refreshing || bullishScanning || intradayScanning}
+            queued={refreshing || bullishScanning}
           />
         )}
 
