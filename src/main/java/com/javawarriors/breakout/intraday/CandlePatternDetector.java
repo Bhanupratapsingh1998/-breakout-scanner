@@ -8,7 +8,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The full single- and multi-candle pattern vocabulary the intraday scanner filters on.
+ * The full single- and multi-candle pattern vocabulary, in both directions and without scoring.
+ *
+ * <p>Written for the intraday scanner, which has since been removed. It survives that removal
+ * because the Index 500 analysis depends on it: {@code index500.pattern.CandlePatternAdapter}
+ * wraps {@link #hammer} and {@link #bullishEngulfing} as two of its fifteen detectors. It is kept
+ * in this package rather than moved so that the removal touched no working feature — the package
+ * name is now historical, not a statement about where this can be used.
  *
  * <p>Deliberately separate from {@code candlestick.CandlestickPatternAnalyzer}, which detects three
  * bullish patterns and is wired into the daily reversal scan's 0-10 scoring. This one needs the

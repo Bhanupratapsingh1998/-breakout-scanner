@@ -30,9 +30,9 @@ public final class BarCache {
     private static final long DAILY_TTL_MILLIS = Duration.ofHours(4).toMillis();
 
     /**
-     * Intraday bars go stale in minutes, not hours. Holding a 15-minute series for four hours
-     * would mean the intraday scanner ranked this morning's candles all afternoon, which is worse
-     * than not caching at all — so intraday entries get their own, much shorter life.
+     * Sub-daily bars go stale in minutes, not hours. Holding a 15-minute series for four hours
+     * would mean a caller ranked this morning's candles all afternoon, which is worse than not
+     * caching at all — so those entries get their own, much shorter life.
      */
     private static final long INTRADAY_TTL_MILLIS = Duration.ofMinutes(5).toMillis();
 
