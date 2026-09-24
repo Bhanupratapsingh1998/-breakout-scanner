@@ -229,27 +229,27 @@ public final class CandlePatternDetector {
         return bars.get(i - 1).close() > bars.get(from).close();
     }
 
-    static double body(Bar b) {
+    public static double body(Bar b) {
         return Math.abs(b.close() - b.open());
     }
 
-    static double range(Bar b) {
+    public static double range(Bar b) {
         return b.high() - b.low();
     }
 
-    static double upperWick(Bar b) {
+    public static double upperWick(Bar b) {
         return b.high() - Math.max(b.open(), b.close());
     }
 
-    static double lowerWick(Bar b) {
+    public static double lowerWick(Bar b) {
         return Math.min(b.open(), b.close()) - b.low();
     }
 
-    static boolean isBull(Bar b) {
+    public static boolean isBull(Bar b) {
         return b.close() > b.open();
     }
 
-    static boolean isBear(Bar b) {
+    public static boolean isBear(Bar b) {
         return b.close() < b.open();
     }
 }

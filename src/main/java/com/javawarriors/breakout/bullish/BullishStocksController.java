@@ -9,44 +9,31 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
- * The Bullish Stocks tab's API.
+ * Single-symbol bullish scoring.
  *
- * <p>Follows the conventions the rest of this app already uses: everything under {@code /api},
- * a POST to start a long-running scan that returns 202 immediately, a status endpoint to poll, and
- * a GET that serves the last completed payload or 404 when there is none yet. That is the same
- * contract {@code /api/scan} + {@code /api/results} offers, so the frontend's polling loop is
- * identical for both tabs.
+ * <p>All that remains of the Bullish Stocks tab's API. The ranked-list, scan and status endpoints
+ * went with the tab; this one stays because My Watchlist scores each followed stock through it.
  */
 @RestController
 @RequestMapping("/api/bullish-stocks")
 public class BullishStocksController {
 
+    /**
+     * Sub-paths that were endpoints of the removed Bullish Stocks tab.
+     *
+     * <p>Deliberately excludes "backtest", which is still live on {@code BullishBacktestController}.
+     * Spring routes that literal path to its own mapping ahead of this template, so it never
+     * reaches here - but listing it would make this set a lie the moment that stopped being true.
+     */
+    private static final Set<String> RETIRED_PATHS = Set.of("scan", "status", "results");
+
     private final BullishStocksService service;
 
     public BullishStocksController(BullishStocksService service) {
         this.service = service;
-    }
-
-    /** The ranked Nifty 500 list from the last completed run. */
-    @GetMapping
-    public ResponseEntity<Map<String, Object>> results() {
-        Map<String, Object> results = service.results();
-        return results == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(results);
-    }
-
-    /** Starts a background ranking run. 202 when started, 409 when one is already going. */
-    @PostMapping("/scan")
-    public ResponseEntity<Map<String, String>> scan() {
-        return service.triggerScan()
-                ? ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("status", "started"))
-                : ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("status", "already-running"));
-    }
-
-    @GetMapping("/status")
-    public Map<String, Object> status() {
-        return service.status();
     }
 
     /**
@@ -58,6 +45,11 @@ public class BullishStocksController {
         if (symbol == null || symbol.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "missing symbol"));
         }
+        // "scan", "status" and the ranked list used to be endpoints here. Now that "/{symbol}" is
+        // the only mapping left it swallows those paths, and a stale client polling /status would
+        // otherwise send this off to fetch a stock called STATUS.NS - a live upstream request, every
+        // 1.5 seconds, answered with a 502. They are gone, and 404 is what gone means.
+        if (RETIRED_PATHS.contains(symbol.toLowerCase())) return ResponseEntity.notFound().build();
         try {
             return ResponseEntity.ok(service.analyzeOne(symbol));
         } catch (IllegalArgumentException e) {
