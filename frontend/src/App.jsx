@@ -188,17 +188,17 @@ function FilterPill({ active, onClick, children }) {
 /** The Dashboard / Bullish Stocks / Reversal Watch / My Watchlist / Trade Journal tab row —
  *  shared by the main app shell AND the "no scan data yet" / "loading" screens, so every tab is
  *  reachable from anywhere, not just after a scan has completed. */
-function ViewTabs({ view, setView, reversalCount, watchlistCount = 0 }) {
+function ViewTabs({ view, setView, reversalCount, watchlistCount = 0, wickCount = 0 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       <FilterPill active={view === 'dashboard'} onClick={() => setView('dashboard')}>
         Dashboard
       </FilterPill>
-      <FilterPill active={view === 'bullish'} onClick={() => setView('bullish')}>
-        Bullish Stocks
-      </FilterPill>
       <FilterPill active={view === 'index500'} onClick={() => setView('index500')}>
         Index 500 Analysis
+      </FilterPill>
+      <FilterPill active={view === 'wick'} onClick={() => setView('wick')}>
+        Wick Reversal{wickCount > 0 ? ` (${wickCount})` : ''}
       </FilterPill>
       <FilterPill active={view === 'reversal'} onClick={() => setView('reversal')}>
         Reversal Watch{reversalCount > 0 ? ` (${reversalCount})` : ''}
@@ -1426,64 +1426,6 @@ const REGIME_META = {
   BEARISH: { color: 'var(--status-critical)', label: 'Bearish' },
 }
 
-/**
- * The summary tiles, each paired with the predicate the server counted it with.
- *
- * <p>These used to be static numbers. That made them unreachable: "Breakouts 47" counts a confirmed
- * breakout, but the STATUS pills filter on trade status, and those 47 stocks are spread across
- * WAIT FOR BREAKOUT, WAIT FOR RETEST, WAIT FOR PULLBACK and AVOID CHASING - so no pill could ever
- * select the group the tile was advertising. The predicates below are kept deliberately identical
- * to the server's, so a tile's count and the rows it filters to can never disagree.
- */
-const BULLISH_GROUPS = [
-  { key: 'ALL', label: 'Ranked', countKey: 'analyzedStockCount', color: 'var(--text-secondary)', match: () => true },
-  { key: 'BULLISH', label: 'Bullish', countKey: 'bullishStockCount', color: 'var(--accent)',
-    match: (r) => r.score >= 65 },
-  { key: 'APLUS', label: 'A+ setups', countKey: 'aPlusCount', color: 'var(--status-good)',
-    match: (r) => r.score >= 85 },
-  { key: 'BREAKOUT', label: 'Breakouts', countKey: 'breakoutCount', color: 'var(--status-good)',
-    match: (r) => r.breakout?.confirmed && !r.breakout?.failed },
-  { key: 'PULLBACK', label: 'Pullbacks / retests', countKey: 'pullbackCount', color: 'var(--status-warning)',
-    match: (r) => r.setupStage === 'PULLBACK OPPORTUNITY' || r.setupStage === 'BREAKOUT RETEST' },
-  { key: 'BUYNOW', label: 'Buy now', countKey: 'buyNowCount', color: 'var(--status-good)',
-    match: (r) => r.tradeStatus === 'BUY NOW' },
-]
-
-/** A summary tile that is also the filter for the group it counts. */
-function GroupTile({ group, count, served, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex flex-1 flex-col gap-1.5 rounded-xl border p-4 text-left transition-all"
-      style={{
-        minWidth: '9rem',
-        borderColor: active ? group.color : 'var(--border)',
-        background: active ? 'var(--page-plane)' : 'var(--surface-1)',
-        boxShadow: active ? 'var(--shadow-md)' : 'none',
-      }}
-    >
-      <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide"
-        style={{ color: active ? group.color : 'var(--text-secondary)' }}>
-        <Dot color={group.color} size={7} />
-        {group.label}
-      </span>
-      <span className="tabular text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>{count}</span>
-      {/* The tiles count every analysed stock; the table can only show the rows actually served.
-          Saying so is better than a tile that seems to disagree with the list under it. */}
-      {served != null && served < count && (
-        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{served} in this list</span>
-      )}
-    </button>
-  )
-}
-
-const BULLISH_SORTS = [
-  { key: 'score', label: 'Score', get: (r) => r.score },
-  { key: 'rs', label: 'Rel. strength', get: (r) => r.summary.rs3mPct ?? -999 },
-  { key: 'volume', label: 'Volume', get: (r) => r.summary.volumeRatio ?? 0 },
-  { key: 'rr', label: 'R:R', get: (r) => r.summary.riskReward ?? 0 },
-]
-
 function num(v, digits = 2) {
   return v == null || Number.isNaN(v) ? '—' : Number(v).toFixed(digits)
 }
@@ -1500,37 +1442,6 @@ function StatusBadgeBullish({ status }) {
       <Dot color={meta.color} size={7} />
       {meta.label}
     </span>
-  )
-}
-
-/** The market-condition banner the spec asks to show above everything else. */
-function MarketRegimeBanner({ regime }) {
-  if (!regime) return null
-  const meta = REGIME_META[regime.regime] ?? { color: 'var(--text-muted)', label: regime.regime }
-  return (
-    <div
-      className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-4 py-3"
-      style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}
-    >
-      <span className="flex items-center gap-2">
-        <Dot color={meta.color} size={9} />
-        <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-          Market regime
-        </span>
-        <span className="text-sm font-semibold" style={{ color: meta.color }}>{meta.label}</span>
-        <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>
-          {regime.score}/{regime.maxScore}
-        </span>
-      </span>
-      <span className="flex-1 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-        {regime.summary}
-      </span>
-      {!regime.allowsBuyNow && (
-        <span className="text-xs font-semibold" style={{ color: 'var(--status-critical)' }}>
-          Entries withheld in this regime
-        </span>
-      )}
-    </div>
   )
 }
 
@@ -1924,346 +1835,6 @@ function BullishDetailPanel({ row, onOpenChart }) {
         promise of any particular return.
       </p>
     </div>
-  )
-}
-
-/**
- * The Bullish Stocks tab: a Nifty 500 ranking by setup quality.
- *
- * <p>The ranking itself is owned by App rather than by this component. The dashboard has to report
- * whether the ranking has run and what it found, and opening this tab is what starts the scan - so
- * the state has to outlive the tab being mounted. What stays local is only what nothing else cares
- * about: the filter, sort and expansion of the table.
- */
-function BullishStocksView({ data, scanning, progress, scanError, loadError, onScan, queued }) {
-  const [group, setGroup] = useState('ALL')
-  const [status, setStatus] = useState('ALL')
-  const [pattern, setPattern] = useState('ALL')
-  const [sector, setSector] = useState('ALL')
-  const [sortKey, setSortKey] = useState('score')
-  const [query, setQuery] = useState('')
-  const [expanded, setExpanded] = useState(null)
-  const [chartRow, setChartRow] = useState(null)
-
-  // Memoised so the filter/derivation hooks below do not see a fresh array identity every render.
-  const stocks = useMemo(() => data?.stocks ?? [], [data])
-
-  const patterns = useMemo(
-    () => ['ALL', ...Array.from(new Set(stocks.map((r) => r.pattern.name))).sort()],
-    [stocks]
-  )
-  const sectors = useMemo(
-    () => ['ALL', ...Array.from(new Set(stocks.map((r) => r.sector).filter(Boolean))).sort()],
-    [stocks]
-  )
-  const statuses = useMemo(
-    () => ['ALL', ...Object.keys(BULLISH_STATUS_META).filter((s) => stocks.some((r) => r.tradeStatus === s))],
-    [stocks]
-  )
-
-  const rows = useMemo(() => {
-    let r = stocks
-    const g = BULLISH_GROUPS.find((x) => x.key === group)
-    if (g && g.key !== 'ALL') r = r.filter(g.match)
-    if (status !== 'ALL') r = r.filter((x) => x.tradeStatus === status)
-    if (pattern !== 'ALL') r = r.filter((x) => x.pattern.name === pattern)
-    if (sector !== 'ALL') r = r.filter((x) => x.sector === sector)
-    if (query.trim()) {
-      const q = query.trim().toUpperCase()
-      r = r.filter((x) => x.symbol.toUpperCase().includes(q) || (x.name ?? '').toUpperCase().includes(q))
-    }
-    const sort = BULLISH_SORTS.find((s) => s.key === sortKey) ?? BULLISH_SORTS[0]
-    return [...r].sort((a, b) => sort.get(b) - sort.get(a))
-  }, [stocks, group, status, pattern, sector, query, sortKey])
-
-  // How many of each group the served list actually contains. The tiles count every analysed
-  // stock, but the payload is capped, so the two legitimately differ on a large universe.
-  const servedCounts = useMemo(() => {
-    const out = {}
-    BULLISH_GROUPS.forEach((g) => { out[g.key] = g.key === 'ALL' ? stocks.length : stocks.filter(g.match).length })
-    return out
-  }, [stocks])
-
-  // No ranking yet. Opening this tab starts one, so the usual case is that a scan is already
-  // under way by the time this renders — which is a progress report, not an empty state.
-  if (!data) {
-    return (
-      <div
-        className="mx-auto max-w-md rounded-2xl border p-8 text-center"
-        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)', boxShadow: 'var(--shadow-md)' }}
-      >
-        {queued && !scanning ? (
-          <>
-            <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
-            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Queued</p>
-            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              Waiting for the reversal scan to finish, then the ranking starts automatically. They
-              share the same fetched bars, so running them one after the other is far faster.
-            </p>
-          </>
-        ) : scanning ? (
-          <>
-            <div className="mx-auto w-fit animate-pulse" style={{ color: 'var(--accent)' }}><Logo size={34} /></div>
-            <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-              Ranking the Nifty 500…
-            </p>
-            <p className="tabular mx-auto mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-              {progress ?? 'Starting…'}
-            </p>
-            <p className="mx-auto mt-3 max-w-xs text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              The first run of a session fetches around 500 symbols. You can switch tabs while it
-              finishes — it keeps going in the background.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {scanError || (loadError && loadError !== 'no-ranking-yet') ? 'Could not build the ranking' : 'No ranking yet'}
-            </p>
-            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              {scanError || (loadError && loadError !== 'no-ranking-yet')
-                ? (scanError ?? loadError)
-                : 'Rank the Nifty 500 on trend, relative strength, momentum, volume, structure, pattern, breakout quality and risk/reward.'}
-            </p>
-            <button
-              onClick={onScan}
-              className="mt-6 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-              style={{ background: 'var(--accent)' }}
-            >
-              {scanError ? 'Try again' : 'Rank Nifty 500'}
-            </button>
-          </>
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {data.analyzedStockCount} of {data.universeSize} ranked
-          {data.failedCount > 0 ? ` · ${data.failedCount} skipped for short history` : ''}
-          {' · updated '}{new Date(data.timestamp).toLocaleString()}
-        </p>
-        <div className="flex flex-col items-end gap-1">
-          <button
-            onClick={onScan}
-            disabled={scanning}
-            className="flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-60"
-            style={{ borderColor: 'var(--btn-scan-border)', background: 'var(--btn-scan-bg)', color: 'var(--text-primary)' }}
-          >
-            <span className={scanning ? 'inline-block animate-spin' : 'inline-block'}>&#8635;</span>
-            {scanning ? 'Ranking…' : 'Re-rank'}
-          </button>
-          {scanning && progress && (
-            <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{progress}</span>
-          )}
-          {scanError && <span className="text-xs" style={{ color: 'var(--status-serious)' }}>{scanError}</span>}
-        </div>
-      </div>
-
-      <MarketRegimeBanner regime={data.marketRegime} />
-
-      {/* Each tile filters to the group it counts — see BULLISH_GROUPS. */}
-      <div className="mb-2 flex flex-wrap gap-3">
-        {BULLISH_GROUPS.map((g) => (
-          <GroupTile
-            key={g.key}
-            group={g}
-            count={data[g.countKey] ?? 0}
-            served={servedCounts[g.key]}
-            active={group === g.key}
-            onClick={() => setGroup(group === g.key ? 'ALL' : g.key)}
-          />
-        ))}
-      </div>
-      <p className="mb-5 text-xs" style={{ color: 'var(--text-muted)' }}>
-        Tap a tile to filter the table to that group.
-      </p>
-
-      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Status</span>
-          <div className="flex flex-wrap gap-1.5">
-            {statuses.map((s) => (
-              <FilterPill key={s} active={status === s} onClick={() => setStatus(s)}>
-                {s === 'ALL' ? 'All' : (BULLISH_STATUS_META[s]?.label ?? s)}
-              </FilterPill>
-            ))}
-          </div>
-        </div>
-
-        <label className="flex items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Sort</span>
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value)}
-            className="rounded-lg border px-2 py-1.5 text-xs"
-            style={inputStyle}
-          >
-            {BULLISH_SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-        </label>
-
-        <label className="flex items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Pattern</span>
-          <select
-            value={pattern}
-            onChange={(e) => setPattern(e.target.value)}
-            className="rounded-lg border px-2 py-1.5 text-xs"
-            style={inputStyle}
-          >
-            {patterns.map((p) => <option key={p} value={p}>{p === 'ALL' ? 'All' : p}</option>)}
-          </select>
-        </label>
-
-        {sectors.length > 1 && (
-          <label className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Sector</span>
-            <select
-              value={sector}
-              onChange={(e) => setSector(e.target.value)}
-              className="max-w-[11rem] rounded-lg border px-2 py-1.5 text-xs"
-              style={inputStyle}
-            >
-              {sectors.map((s) => <option key={s} value={s}>{s === 'ALL' ? 'All' : s}</option>)}
-            </select>
-          </label>
-        )}
-
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search name or symbol…"
-          className="ml-auto w-52 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2"
-          style={{ ...inputStyle, '--tw-ring-color': 'var(--accent)' }}
-        />
-      </div>
-
-      <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[68rem] text-sm">
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--gridline)' }}>
-                {['#', 'Stock', 'Score', 'Pattern', 'Trend', 'RS 3M', 'RSI', 'ADX', 'Vol', 'Entry', 'SL', 'Target', 'R:R', 'Status']
-                  .map((h, i) => (
-                    <th
-                      key={h}
-                      className={`px-3 py-3 text-xs font-semibold uppercase tracking-wide ${i >= 5 && i <= 12 ? 'text-right' : 'text-left'}`}
-                      style={{ color: 'var(--text-muted)' }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <Fragment key={row.symbol}>
-                  <tr
-                    onClick={() => setExpanded(expanded === row.symbol ? null : row.symbol)}
-                    className="cursor-pointer transition-colors"
-                    style={{ borderTop: '1px solid var(--gridline)' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <td className="tabular px-3 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{row.rank}</td>
-                    <td className="px-3 py-2.5">
-                      <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{row.name ?? row.symbol}</div>
-                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {row.symbol}{row.sector ? ` · ${row.sector}` : ''}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="tabular text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        {num(row.score, 0)}
-                      </div>
-                      <div className="text-xs" style={{ color: CLASSIFICATION_COLOR[row.classification] ?? 'var(--text-muted)' }}>
-                        {row.classification}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      {row.pattern.name}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      {row.trend.label}
-                    </td>
-                    <td
-                      className="tabular px-3 py-2.5 text-right text-xs"
-                      style={{ color: (row.summary.rs3mPct ?? 0) >= 0 ? 'var(--status-good)' : 'var(--status-critical)' }}
-                    >
-                      {signedPct(row.summary.rs3mPct)}
-                    </td>
-                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      {num(row.summary.rsi, 0)}
-                    </td>
-                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      {num(row.summary.adx, 0)}
-                    </td>
-                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      {num(row.summary.volumeRatio, 1)}×
-                    </td>
-                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--text-primary)' }}>
-                      {row.summary.entry != null ? fmtPrice(row.summary.entry) : '—'}
-                    </td>
-                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--status-critical)' }}>
-                      {row.summary.stopLoss != null ? fmtPrice(row.summary.stopLoss) : '—'}
-                    </td>
-                    <td className="tabular px-3 py-2.5 text-right text-xs" style={{ color: 'var(--status-good)' }}>
-                      {row.summary.target != null ? fmtPrice(row.summary.target) : '—'}
-                    </td>
-                    <td className="tabular px-3 py-2.5 text-right text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                      {row.summary.riskReward != null ? `${num(row.summary.riskReward, 1)}:1` : '—'}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <StatusBadgeBullish status={row.tradeStatus} />
-                      {/* The stage is what the summary tiles group by, and it is not always
-                          obvious from the status: a stock whose breakout is confirmed can still
-                          read "Wait for breakout" when the trend is what is blocking the entry.
-                          Showing both stops that looking like a contradiction. */}
-                      {row.setupStage && row.setupStage !== row.tradeStatus && (
-                        <div className="mt-0.5 text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-                          {row.setupStage}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                  {expanded === row.symbol && (
-                    <tr>
-                      <td colSpan={14} className="p-0">
-                        <BullishDetailPanel row={row} onOpenChart={setChartRow} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={14} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
-                    No stocks match this filter.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {chartRow && (
-        <FullChartModal
-          row={{
-            symbol: chartRow.symbol,
-            name: chartRow.name,
-            values: {
-              'Prev resistance': chartRow.breakout.level,
-              'Breakout Confirm Level': chartRow.breakout.confirmedLevel,
-            },
-          }}
-          onClose={() => setChartRow(null)}
-        />
-      )}
-    </>
   )
 }
 
@@ -3270,67 +2841,6 @@ function FeatureCard({ title, description, state, detail, metrics, accent, onOpe
 }
 
 /**
- * The highest-ranked setups, inline.
- *
- * <p>A dashboard made purely of navigation cards makes the user click through to learn anything.
- * Once the ranking exists, its top rows are the single most useful thing the app can show, so they
- * belong on the landing page rather than one tab away.
- */
-function TopSetups({ stocks, onOpen }) {
-  const top = stocks.slice(0, 5)
-  if (top.length === 0) return null
-  return (
-    <div className="mb-5 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3" style={{ borderColor: 'var(--gridline)' }}>
-        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-          Top-ranked setups
-        </span>
-        <button onClick={onOpen} className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>
-          See all →
-        </button>
-      </div>
-      <div className="divide-y" style={{ borderColor: 'var(--gridline)' }}>
-        {top.map((s) => {
-          const meta = BULLISH_STATUS_META[s.tradeStatus] ?? { color: 'var(--text-muted)', label: s.tradeStatus }
-          return (
-            <button
-              key={s.symbol}
-              onClick={onOpen}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors"
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <span className="tabular w-5 shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>{s.rank}</span>
-              <span
-                className="tabular w-10 shrink-0 rounded px-1.5 py-0.5 text-center text-xs font-semibold"
-                style={{ background: 'var(--accent-wash)', color: 'var(--accent)' }}
-              >
-                {Math.round(s.score)}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                  {s.name ?? s.symbol}
-                </span>
-                <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {s.pattern.name}{s.sector ? ` · ${s.sector}` : ''}
-                </span>
-              </span>
-              <span className="hidden shrink-0 text-xs sm:block" style={{ color: 'var(--text-secondary)' }}>
-                {s.trend.label}
-              </span>
-              <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold" style={{ color: meta.color }}>
-                <Dot color={meta.color} size={6} />
-                <span className="hidden md:inline">{meta.label}</span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-/**
  * The landing view.
  *
  * <p>It deliberately does not require a scan. The market regime comes from two index series the
@@ -3339,7 +2849,7 @@ function TopSetups({ stocks, onOpen }) {
  * is what starts that scan. The previous behaviour — a full-screen "No scan data yet" wall in front
  * of the entire app — made the first five minutes of every cold start show nothing at all.
  */
-function DashboardView({ reversal, bullish, index500, watchlistCount, onOpen }) {
+function DashboardView({ reversal, index500, wick, watchlistCount, onOpen }) {
   const [regime, setRegime] = useState(null)
   const [regimeError, setRegimeError] = useState(null)
   const [money, setMoney] = useState(null)
@@ -3365,13 +2875,10 @@ function DashboardView({ reversal, bullish, index500, watchlistCount, onOpen }) 
   const reversals = reversal.data?.reversals?.length ?? 0
 
   const reversalState = reversal.scanning ? 'running' : reversal.data ? 'ready' : 'idle'
-  const bullishState = bullish.scanning ? 'running' : bullish.data ? 'ready' : 'idle'
 
   return (
     <>
       <RegimeHero regime={regime} error={regimeError} />
-
-      {bullish.data && <TopSetups stocks={bullish.data.stocks ?? []} onOpen={() => onOpen('bullish')} />}
 
       {money && (money.currentMonth || money.latestMonth) && (() => {
         const m = money.currentMonth ?? money.latestMonth
@@ -3436,20 +2943,6 @@ function DashboardView({ reversal, bullish, index500, watchlistCount, onOpen }) 
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <FeatureCard
-          title="Bullish Stocks"
-          description="Ranks the Nifty 500 out of 100 on trend, relative strength, momentum, volume, structure, pattern, breakout quality and risk/reward."
-          state={bullishState}
-          accent="var(--status-good)"
-          detail={bullish.scanning ? (bullish.progress ?? 'Ranking') : undefined}
-          metrics={bullish.data ? [
-            { label: 'Bullish', value: bullish.data.bullishStockCount, color: 'var(--accent)' },
-            { label: 'A+', value: bullish.data.aPlusCount, color: 'var(--status-good)' },
-            { label: 'Buy now', value: bullish.data.buyNowCount, color: 'var(--status-good)' },
-          ] : null}
-          onOpen={() => onOpen('bullish')}
-        />
-
-        <FeatureCard
           title="Index 500 Analysis"
           description="Ranks every sector by six-month performance, then finds which fallen stocks inside them are showing a confirmed reversal or breakout pattern."
           state={index500.scanning ? 'running' : index500.data ? 'ready' : 'idle'}
@@ -3461,6 +2954,20 @@ function DashboardView({ reversal, bullish, index500, watchlistCount, onOpen }) 
             { label: 'Reversals', value: index500.data.reversalCount, color: 'var(--status-good)' },
           ] : null}
           onOpen={() => onOpen('index500')}
+        />
+
+        <FeatureCard
+          title="Wick Reversal"
+          description="A sharp move taken straight back by the next candle — merged into one bigger candle, that is a long wick where one side lost control. Bullish off a drop, bearish off a rally."
+          state={wick.scanning ? 'running' : wick.data ? 'ready' : 'idle'}
+          accent="var(--cat-nifty500)"
+          detail={wick.scanning ? (wick.progress ?? 'Scanning') : undefined}
+          metrics={wick.data ? [
+            { label: 'Signals', value: wick.data.total, color: 'var(--accent)' },
+            { label: 'Level live', value: wick.data.pendingCount, color: 'var(--status-warning)' },
+            { label: 'Confirmed', value: wick.data.confirmedCount, color: 'var(--status-good)' },
+          ] : null}
+          onOpen={() => onOpen('wick')}
         />
 
         <FeatureCard
@@ -4045,10 +3552,458 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
   )
 }
 
+const WICK_DIRECTION_META = {
+  BULLISH: { color: 'var(--status-good)', label: 'Bullish', arrow: '▲', rejected: 'drop', wick: 'lower' },
+  BEARISH: { color: 'var(--status-critical)', label: 'Bearish', arrow: '▼', rejected: 'rally', wick: 'upper' },
+}
+
+const WICK_STATUS_META = {
+  PENDING: { color: 'var(--status-warning)', label: 'Level live' },
+  CONFIRMED: { color: 'var(--status-good)', label: 'Confirmed' },
+  INVALIDATED: { color: 'var(--status-critical)', label: 'Failed' },
+}
+
+const WICK_SCORE_LABELS = {
+  wick: 'Wick vs body',
+  recovery: 'Recovery',
+  priorMove: 'Move rejected',
+  atExtreme: 'At the extreme',
+  volume: 'Volume',
+}
+
+const WICK_STATUS_FILTERS = [
+  ['', 'Live + confirmed'],
+  ['PENDING', 'Level still live'],
+  ['CONFIRMED', 'Confirmed'],
+  ['INVALIDATED', 'Failed'],
+  ['ALL', 'Everything found'],
+]
+
+/**
+ * What {@code count} candles of an interval add up to — the mirror of the server's own label, used
+ * for filter pills that exist before any row has been fetched to read a label off.
+ */
+function mergedLabelFor(interval, count) {
+  if (!interval) return `${count} candles`
+  if (interval.endsWith('d')) return `${(parseInt(interval, 10) || 1) * count}-day`
+  const unit = interval.endsWith('h') ? 60 : interval.endsWith('m') ? 1 : 0
+  const minutes = (parseInt(interval, 10) || 0) * unit
+  if (!minutes) return `${count} × ${interval}`
+  const total = minutes * count
+  if (total < 60) return `${total}m`
+  return total % 60 === 0 ? `${total / 60}h` : `${Math.floor(total / 60)}h${total % 60}m`
+}
+
+/**
+ * The candles of a group and what they become, drawn to scale.
+ *
+ * <p>This feature's whole claim is that a drop and its recovery are one long-wicked candle a
+ * timeframe up. A table of numbers asserts that; a drawing shows it, and shows immediately when the
+ * merged candle is a weak example — a stubby wick over a fat body is obvious here and invisible in
+ * a column of ratios.
+ */
+function WickCandles({ row, height = 132 }) {
+  const m = row.merged
+  const lo = m.low
+  const hi = m.high
+  const span = hi - lo
+  const dir = WICK_DIRECTION_META[row.direction] ?? WICK_DIRECTION_META.BULLISH
+  const bullishSide = row.direction !== 'BEARISH'
+  if (!(span > 0)) return null
+
+  const y = (v) => ((hi - v) / span) * height
+  const candle = (open, close, high, low, key, label) => {
+    const top = y(Math.max(open, close))
+    const bottom = y(Math.min(open, close))
+    const up = close >= open
+    const color = up ? 'var(--status-good)' : 'var(--status-critical)'
+    return (
+      <div key={key} className="flex flex-col items-center gap-1.5">
+        <div className="relative w-7" style={{ height }}>
+          <span className="absolute left-1/2 w-px -translate-x-1/2"
+            style={{ top: y(high), height: Math.max(1, y(low) - y(high)), background: color }} />
+          <span className="absolute left-1/2 w-5 -translate-x-1/2 rounded-[2px]"
+            style={{ top, height: Math.max(2, bottom - top), background: color }} />
+        </div>
+        <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+          {label}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-start gap-4">
+      {candle(row.pair.firstOpen, row.pair.firstClose, row.pair.firstHigh, row.pair.firstLow, 'a', '1st')}
+      {/* A three-candle group's middle candle is not carried in the payload, so it is marked as a
+          gap rather than drawn wrong. The ends are what the composition gate actually tests. */}
+      {row.candles > 2 && (
+        <div className="flex flex-col items-center gap-1.5 self-stretch">
+          <div className="flex items-center" style={{ height }}>
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>⋯</span>
+          </div>
+          <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            +{row.candles - 2}
+          </span>
+        </div>
+      )}
+      {candle(row.pair.secondOpen, row.pair.secondClose, row.pair.secondHigh, row.pair.secondLow, 'b', 'last')}
+      <span className="self-center text-lg font-semibold" style={{ color: 'var(--text-muted)' }}>=</span>
+      {candle(m.open, m.close, m.high, m.low, 'm', row.mergedInterval)}
+      <div className="flex-1 self-center text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+        <div>
+          {dir.wick[0].toUpperCase() + dir.wick.slice(1)} wick{' '}
+          <span className="tabular font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {num(row.wickToBody, 1)}×
+          </span> the body, closing <span className="tabular font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {Math.round(row.closePosition * 100)}%
+          </span> of the range away from the {bullishSide ? 'low' : 'high'} it rejected.
+        </div>
+        {Number.isFinite(Number(row.recoveredPct)) && (
+          <div className="mt-1">
+            {Number(row.recoveredPct) > 100 ? (
+              <>
+                The last candle closed{' '}
+                <span className="tabular font-semibold" style={{ color: dir.color }}>
+                  {bullishSide ? 'above' : 'below'}
+                </span>{' '}
+                where the {dir.rejected} began — more than taking it back.
+              </>
+            ) : (
+              <>
+                The last candle took back{' '}
+                <span className="tabular font-semibold" style={{ color: dir.color }}>
+                  {num(row.recoveredPct, 0)}%
+                </span> of the {dir.rejected}.
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The expanded row: the drawing, the levels it implies, and how the score was reached. */
+function WickDetail({ row }) {
+  const parts = row.scoreParts ?? {}
+  const dir = WICK_DIRECTION_META[row.direction] ?? WICK_DIRECTION_META.BULLISH
+  const bullish = row.direction !== 'BEARISH'
+  return (
+    <div className="border-t px-4 py-4" style={{ borderColor: 'var(--gridline)', background: 'var(--page-plane)' }}>
+      <p className="mb-4 max-w-4xl text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+        {row.statusReason}
+      </p>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-xl border p-3 md:col-span-2"
+          style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h4 className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              {row.candles} {row.interval} candles = one {row.mergedInterval}
+            </h4>
+            <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: dir.color }}>
+              {dir.arrow} {dir.label} — a {dir.rejected} rejected
+            </span>
+          </div>
+          <WickCandles row={row} />
+          <div className="mt-4 grid grid-cols-2 gap-x-6 sm:grid-cols-4">
+            <DetailRow label={bullish ? 'Trigger (up)' : 'Trigger (down)'}
+              value={fmtPrice(row.triggerLevel)} color={dir.color} />
+            <DetailRow label={bullish ? 'Wick low' : 'Wick high'}
+              value={fmtPrice(row.invalidationLevel)} color="var(--status-critical)" />
+            <DetailRow label="Last price" value={fmtPrice(row.price)} />
+            <DetailRow label="Risk to wick" value={`${num(row.riskPct, 1)}%`} />
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+            The wick {bullish ? 'low' : 'high'} is where the rejection would be proved wrong, and a
+            close {bullish ? 'above' : 'below'} the candle is where it would be proved right. Both
+            are levels on a chart, not instructions.
+          </p>
+        </div>
+
+        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+          <h4 className="mb-3 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+            Score — {num(row.score, 0)} / 100
+          </h4>
+          <div className="flex flex-col gap-2.5">
+            <ScoreBar label={WICK_SCORE_LABELS.wick} points={parts.wick ?? 0} maxPoints={30} />
+            <ScoreBar label={WICK_SCORE_LABELS.recovery} points={parts.recovery ?? 0} maxPoints={25} />
+            <ScoreBar label={WICK_SCORE_LABELS.priorMove} points={parts.priorMove ?? 0} maxPoints={20} />
+            <ScoreBar label={WICK_SCORE_LABELS.atExtreme} points={parts.atExtreme ?? 0} maxPoints={15} />
+            <ScoreBar label={WICK_SCORE_LABELS.volume} points={parts.volume ?? 0} maxPoints={10} />
+          </div>
+          <div className="mt-3 border-t pt-2" style={{ borderColor: 'var(--gridline)' }}>
+            <DetailRow label={`${bullish ? 'Fall' : 'Rally'} rejected`}
+              value={`${num(row.priorMoveInRanges, 1)}× range`} />
+            <DetailRow label={bullish ? 'Above the low' : 'Below the high'}
+              value={`${num(row.distanceFromExtremeRanges, 2)}× range`} />
+            <DetailRow label="Volume vs avg" value={`${num(row.volumeRatio, 2)}×`} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Wick Reversal.
+ *
+ * <p>Scans the Nifty 500 for the setup in the reference images: a decisive down candle taken
+ * straight back by the next one, which merged into a candle of double the size is a long lower
+ * wick. One interval per scan, because the merge is defined against a single candle size and a list
+ * mixing 30-minute and 2-day signals would be ranking two different things against each other.
+ */
+function WickReversalView({ data, scanning, progress, scanError, loadError, onScan, queued,
+                            interval, onIntervalChange }) {
+  const [intervals, setIntervals] = useState([])
+  const [status, setStatus] = useState('')
+  // Two candles is the setup exactly as drawn, so it leads; three is the same story over a slower
+  // fall. Defaulting to two keeps the list one row per stock until the user asks for both.
+  const [candles, setCandles] = useState(2)
+  // Direction leads the filters: bullish and bearish are opposite trades, not two flavours of one.
+  const [direction, setDirection] = useState('BULLISH')
+  const [sector, setSector] = useState('ALL')
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/wick-reversal/intervals')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setIntervals(d?.intervals ?? []))
+      .catch(() => {})
+  }, [])
+
+  const rows = useMemo(() => {
+    let r = data?.signals ?? []
+    if (status === '') r = r.filter((x) => x.status !== 'INVALIDATED')
+    else if (status !== 'ALL') r = r.filter((x) => x.status === status)
+    if (direction !== 'ALL') r = r.filter((x) => x.direction === direction)
+    if (candles !== 'ALL') r = r.filter((x) => x.candles === candles)
+    if (sector !== 'ALL') r = r.filter((x) => x.sector === sector)
+    const q = query.trim().toLowerCase()
+    if (q) r = r.filter((x) => `${x.symbol} ${x.companyName}`.toLowerCase().includes(q))
+    return r
+  }, [data, status, direction, candles, sector, query])
+
+  if (!data) {
+    return (
+      <ScanPending
+        scanning={scanning}
+        progress={progress}
+        error={scanError ?? loadError}
+        onScan={() => onScan(interval)}
+        what="Wick Reversal"
+        queued={queued}
+        queuedBehind="the running scan"
+        description="Finds a sharp move that the very next candle takes back — which, merged into one bigger candle, is a long wick: lower after a drop, upper after a rally."
+      />
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {rows.length} of {data.total} signals
+          {` · ${data.interval} candles merged in groups of ${(data.candleCounts ?? []).join(' and ')}`}
+          {data.generatedAt ? ` · scanned ${new Date(data.generatedAt).toLocaleString()}` : ''}
+        </p>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <select
+              value={interval}
+              onChange={(e) => { onIntervalChange(e.target.value); onScan(e.target.value) }}
+              disabled={scanning}
+              className="rounded-lg border px-2 py-1.5 text-xs outline-none disabled:opacity-60"
+              style={inputStyle}
+            >
+              {intervals.map((iv) => (
+                <option key={iv.interval} value={iv.interval}>{iv.interval} candles</option>
+              ))}
+            </select>
+            <button onClick={() => onScan(interval)} disabled={scanning}
+              className="flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-60"
+              style={{ borderColor: 'var(--btn-scan-border)', background: 'var(--btn-scan-bg)', color: 'var(--text-primary)' }}>
+              <span className={scanning ? 'inline-block animate-spin' : 'inline-block'}>&#8635;</span>
+              {scanning ? 'Scanning…' : 'Rescan'}
+            </button>
+          </div>
+          {scanning && progress && <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{progress}</span>}
+          {scanError && <span className="max-w-xs text-right text-xs" style={{ color: 'var(--status-serious)' }}>{scanError}</span>}
+        </div>
+      </div>
+
+      <div className="mb-5 flex flex-wrap gap-3">
+        <StatTile label="Signals" value={data.total} />
+        <StatTile label="Bullish" value={data.bullishCount ?? 0} color="var(--status-good)" />
+        <StatTile label="Bearish" value={data.bearishCount ?? 0} color="var(--status-critical)" />
+        <StatTile label="On the last candle" value={data.freshCount} color="var(--accent)" />
+        <StatTile label="Level live" value={data.pendingCount} color="var(--status-warning)" />
+        <StatTile label="Confirmed" value={data.confirmedCount} color="var(--status-good)" />
+        <StatTile label="Failed" value={data.invalidatedCount} color="var(--status-critical)" />
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {(data.directions ?? ['BULLISH', 'BEARISH']).map((d) => {
+            const meta = WICK_DIRECTION_META[d] ?? { label: d, arrow: '' }
+            return (
+              <FilterPill key={d} active={direction === d} onClick={() => setDirection(d)}>
+                {meta.arrow} {meta.label}
+                {data.byDirection?.[d] != null ? ` (${data.byDirection[d]})` : ''}
+              </FilterPill>
+            )
+          })}
+          <FilterPill active={direction === 'ALL'} onClick={() => setDirection('ALL')}>Either</FilterPill>
+        </div>
+        {/* Combination next: it changes what a row *is*, where status only changes which rows show. */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            Candles
+          </span>
+          {(data.candleCounts ?? [2, 3]).map((n) => (
+            <FilterPill key={n} active={candles === n} onClick={() => setCandles(n)}>
+              {n} → {mergedLabelFor(data.interval, n)}
+              {data.byCandles?.[n] != null ? ` (${data.byCandles[n]})` : ''}
+            </FilterPill>
+          ))}
+          <FilterPill active={candles === 'ALL'} onClick={() => setCandles('ALL')}>Both</FilterPill>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {WICK_STATUS_FILTERS.map(([key, label]) => (
+            <FilterPill key={key || 'default'} active={status === key} onClick={() => setStatus(key)}>
+              {label}
+            </FilterPill>
+          ))}
+        </div>
+        {(data.sectors ?? []).length > 1 && (
+          <label className="flex items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Sector</span>
+            <select value={sector} onChange={(e) => setSector(e.target.value)}
+              className="max-w-[11rem] rounded-lg border px-2 py-1.5 text-xs" style={inputStyle}>
+              <option value="ALL">All</option>
+              {(data.sectors ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </label>
+        )}
+        <input value={query} onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name or symbol…"
+          className="ml-auto w-52 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2"
+          style={{ ...inputStyle, '--tw-ring-color': 'var(--accent)' }} />
+      </div>
+
+      <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[60rem] text-sm">
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--gridline)' }}>
+                {[['#', 'left'], ['Stock', 'left'], ['Sector', 'left'], ['Signal', 'left'],
+                  ['Fired', 'left'], ['Price', 'right'], ['Wick', 'right'], ['Close', 'right'],
+                  ['Vol', 'right'], ['Trigger', 'right'], ['Wick low', 'right'], ['Risk', 'right'],
+                  ['Score', 'left'], ['Status', 'left']].map(([h, align]) => (
+                  <th key={h} className={`px-2 py-3 text-xs font-semibold uppercase tracking-wide text-${align}`}
+                    style={{ color: 'var(--text-muted)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, idx) => {
+                const meta = WICK_STATUS_META[row.status] ?? { color: 'var(--text-muted)', label: row.status }
+                const dirMeta = WICK_DIRECTION_META[row.direction] ?? WICK_DIRECTION_META.BULLISH
+                // A symbol can fire in both directions and at both group sizes, so the symbol alone
+                // is not a unique identity. Keyed on it, React reused and dropped rows.
+                const id = `${row.symbol}-${row.direction}-${row.candles}`
+                return (
+                  <Fragment key={id}>
+                    <tr onClick={() => setExpanded(expanded === id ? null : id)}
+                      className="cursor-pointer transition-colors"
+                      style={{ borderTop: '1px solid var(--gridline)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--page-plane)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                      <td className="tabular px-2 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
+                      <td className="px-2 py-2.5" title={row.companyName}>
+                        <div className="max-w-[9rem] truncate font-medium" style={{ color: 'var(--text-primary)' }}>
+                          {row.companyName}
+                        </div>
+                        <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{row.symbol}</div>
+                      </td>
+                      <td className="max-w-[5.5rem] truncate px-2 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {row.sector}
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <span className="tabular whitespace-nowrap text-[11px] font-semibold"
+                          style={{ color: dirMeta.color }}>
+                          {dirMeta.arrow} {dirMeta.label}
+                        </span>
+                        <div className="tabular text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                          {row.candles} → {row.mergedInterval}
+                        </div>
+                      </td>
+                      <td className="px-2 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {row.barsAgo === 0 ? 'Latest' : `${row.barsAgo} ago`}
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>
+                        {fmtPrice(row.price)}
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs font-semibold" style={{ color: 'var(--accent)' }}>
+                        {num(row.wickToBody, 1)}×
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {Math.round(row.closePosition * 100)}%
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {num(row.volumeRatio, 1)}×
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: 'var(--status-good)' }}>
+                        {fmtPrice(row.triggerLevel)}
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: 'var(--status-critical)' }}>
+                        {fmtPrice(row.invalidationLevel)}
+                      </td>
+                      <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {num(row.riskPct, 1)}%
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <span className="tabular rounded px-1.5 py-0.5 text-xs font-semibold"
+                          style={{ background: 'var(--accent-wash)', color: 'var(--accent)' }}>
+                          {num(row.score, 0)}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold"
+                          style={{ color: meta.color }}>
+                          <Dot color={meta.color} size={7} />
+                          {meta.label}
+                        </span>
+                      </td>
+                    </tr>
+                    {expanded === id && (
+                      <tr><td colSpan={14} className="p-0"><WickDetail row={row} /></td></tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={14} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                    {(data.signals?.length ?? 0) === 0
+                      ? 'No wick reversals fired in this scan.'
+                      : 'Nothing matches these filters.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  )
+}
+
 const VIEW_TITLES = {
   dashboard: 'Dashboard',
-  bullish: 'Bullish Stocks',
   index500: 'Index 500 Analysis',
+  wick: 'Wick Reversal',
   reversal: 'Reversal Watch',
   lookup: 'My Watchlist',
   journal: 'Trade Journal',
@@ -4059,8 +4014,8 @@ const VIEW_SUBTITLES = {
   dashboard: 'Market regime, and where each scanner stands. Opening a tab starts its scan.',
   reversal: 'Candlestick-confirmed reversal setups in beaten-down Nifty 500 names.',
   lookup: 'Symbols you follow, scored by the same 100-point bullish assessment as the ranked table.',
+  wick: 'A sharp move taken straight back by the candle after it — merged into one bigger candle, a long lower wick off a drop is bullish, a long upper wick off a rally is bearish.',
   index500: 'Sector by sector, then stock by stock: which sectors have fallen hardest over six months, and which names inside them are showing a confirmed reversal or breakout.',
-  bullish: 'Nifty 500 ranked on trend, relative strength, momentum, volume, price structure, pattern quality, breakout quality and risk/reward.',
   journal: 'Your delivery/swing trade log, auto-calculated performance dashboard, and 1:2 R:R calculator.',
   expenses: 'Salary, EMIs and fixed costs month by month — and what that adds up to over a year.',
 }
@@ -4082,15 +4037,6 @@ export default function App() {
   const [refreshError, setRefreshError] = useState(null)
   const pollRef = useRef(null)
 
-  // The bullish ranking lives here rather than inside its tab: the dashboard reports on it, and
-  // opening the tab is what starts it, so the state has to outlive the tab being mounted.
-  const [bullishData, setBullishData] = useState(null)
-  const [bullishError, setBullishError] = useState(null)
-  const [bullishScanning, setBullishScanning] = useState(false)
-  const [bullishProgress, setBullishProgress] = useState(null)
-  const [bullishScanError, setBullishScanError] = useState(null)
-  const bullishPollRef = useRef(null)
-
   // The Index 500 analysis keeps only a summary here — one row plus the aggregate counts. The tab
   // queries the full table itself with whatever filters are set, and the dashboard needs nothing
   // more than the counts, so holding 500 rows in the shell would be carrying them for no reader.
@@ -4101,9 +4047,19 @@ export default function App() {
   const [index500ScanError, setIndex500ScanError] = useState(null)
   const index500PollRef = useRef(null)
 
+  // One interval per run: the merge is defined against a single candle size, so the scan carries
+  // which one it used rather than mixing 30-minute and 2-day signals into one ranking.
+  const [wickData, setWickData] = useState(null)
+  const [wickError, setWickError] = useState(null)
+  const [wickScanning, setWickScanning] = useState(false)
+  const [wickProgress, setWickProgress] = useState(null)
+  const [wickScanError, setWickScanError] = useState(null)
+  const [wickInterval, setWickInterval] = useState('1d')
+  const wickPollRef = useRef(null)
+
   // One auto-start per feature per session. Without this a scan that fails would be retried on
   // every re-render that lands on its tab, which is a request loop rather than a retry.
-  const autoStarted = useRef({ reversal: false, bullish: false, index500: false })
+  const autoStarted = useRef({ reversal: false, index500: false, wick: false })
 
   function loadResults() {
     return fetch('/api/results')
@@ -4126,58 +4082,6 @@ export default function App() {
     loadResults().catch((e) => setError(e.message))
     return () => clearInterval(pollRef.current)
   }, [])
-
-  function loadBullish() {
-    return fetch('/api/bullish-stocks')
-      .then((r) => {
-        if (r.status === 404) throw new Error('no-ranking-yet')
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
-      })
-      .then((d) => { setBullishData(d); setBullishError(null) })
-  }
-
-  useEffect(() => {
-    loadBullish().catch((e) => setBullishError(e.message))
-    return () => clearInterval(bullishPollRef.current)
-  }, [])
-
-  async function runBullishScan() {
-    if (bullishScanning) return
-    setBullishScanError(null)
-    setBullishScanning(true)
-    setBullishProgress('Starting ranking…')
-    try {
-      const res = await fetch('/api/bullish-stocks/scan', { method: 'POST' })
-      if (res.status !== 202 && res.status !== 409) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error ?? `HTTP ${res.status}`)
-      }
-      bullishPollRef.current = setInterval(async () => {
-        try {
-          const st = await fetch('/api/bullish-stocks/status').then((r) => r.json())
-          if (st.running) {
-            setBullishProgress(st.progress ?? 'Ranking…')
-            return
-          }
-          clearInterval(bullishPollRef.current)
-          if (st.lastResult?.error) setBullishScanError(st.lastResult.error)
-          else await loadBullish().catch((e) => setBullishError(e.message))
-          setBullishScanning(false)
-          setBullishProgress(null)
-        } catch (e) {
-          clearInterval(bullishPollRef.current)
-          setBullishScanning(false)
-          setBullishProgress(null)
-          setBullishScanError(e.message || 'Lost connection to the API server')
-        }
-      }, 1500)
-    } catch (e) {
-      setBullishScanning(false)
-      setBullishProgress(null)
-      setBullishScanError(e.message || 'Could not reach the API server')
-    }
-  }
 
   /**
    * The aggregate view of the last analysis.
@@ -4235,6 +4139,60 @@ export default function App() {
       setIndex500Scanning(false)
       setIndex500Progress(null)
       setIndex500ScanError(e.message || 'Could not reach the API server')
+    }
+  }
+
+  function loadWick() {
+    return fetch('/api/wick-reversal/results?status=ALL')
+      .then((r) => {
+        if (r.status === 404) throw new Error('no-wick-yet')
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((d) => { setWickData(d); setWickError(null); if (d.interval) setWickInterval(d.interval) })
+  }
+
+  useEffect(() => {
+    loadWick().catch((e) => setWickError(e.message))
+    return () => clearInterval(wickPollRef.current)
+  }, [])
+
+  async function runWickScan(interval) {
+    if (wickScanning) return
+    const chosen = interval ?? wickInterval
+    setWickScanError(null)
+    setWickScanning(true)
+    setWickProgress('Starting wick scan…')
+    try {
+      const res = await fetch(`/api/wick-reversal/scan?interval=${encodeURIComponent(chosen)}`,
+        { method: 'POST' })
+      if (res.status !== 202 && res.status !== 409) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      wickPollRef.current = setInterval(async () => {
+        try {
+          const st = await fetch('/api/wick-reversal/status').then((r) => r.json())
+          if (st.running) {
+            setWickProgress(st.progress ?? 'Scanning…')
+            return
+          }
+          clearInterval(wickPollRef.current)
+          if (st.lastResult?.error) setWickScanError(st.lastResult.error)
+          else await loadWick().catch((e) => setWickError(e.message))
+          setWickScanning(false)
+          setWickProgress(null)
+        } catch (e) {
+          clearInterval(wickPollRef.current)
+          setWickScanning(false)
+          setWickProgress(null)
+          setWickScanError(e.message || 'Lost connection to the API server')
+        }
+      }, 1500)
+    } catch (e) {
+      setWickScanning(false)
+      setWickProgress(null)
+      setWickScanError(e.message || 'Could not reach the API server')
     }
   }
 
@@ -4318,22 +4276,22 @@ export default function App() {
     // costs nothing, because the first scan fills the shared bar cache and the second then
     // completes in seconds. These flags are effect dependencies, so the queued scan starts on its
     // own the moment the running one finishes.
-    const busy = refreshing || bullishScanning || index500Scanning
+    const busy = refreshing || index500Scanning || wickScanning
 
     if (view === 'reversal' && !data && !busy && !autoStarted.current.reversal) {
       autoStarted.current.reversal = true
       refreshAll()
     }
-    if (view === 'bullish' && !bullishData && !busy && !autoStarted.current.bullish) {
-      autoStarted.current.bullish = true
-      runBullishScan()
-    }
     if (view === 'index500' && !index500Summary && !busy && !autoStarted.current.index500) {
       autoStarted.current.index500 = true
       runIndex500Scan()
     }
+    if (view === 'wick' && !wickData && !busy && !autoStarted.current.wick) {
+      autoStarted.current.wick = true
+      runWickScan(wickInterval)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, data, bullishData, index500Summary, refreshing, bullishScanning, index500Scanning])
+  }, [view, data, index500Summary, wickData, refreshing, index500Scanning, wickScanning])
 
   // No full-screen gate any more. Every view renders inside the same shell and handles its own
   // empty state, so the tab row, the header and the dashboard stay reachable at all times — the
@@ -4363,7 +4321,7 @@ export default function App() {
             </p>
             <div className="mt-3">
               <ViewTabs view={view} setView={setView} reversalCount={data?.reversals?.length ?? 0}
-                watchlistCount={customRows.length} />
+                watchlistCount={customRows.length} wickCount={wickData?.total ?? 0} />
             </div>
           </div>
           {/* Only Reversal Watch is fed by this scan, so only it gets the button. The Bullish tab carries
@@ -4448,10 +4406,24 @@ export default function App() {
         {view === 'dashboard' && (
           <DashboardView
             reversal={{ data, scanning: refreshing, progress: refreshProgress }}
-            bullish={{ data: bullishData, scanning: bullishScanning, progress: bullishProgress }}
             index500={{ data: index500Summary, scanning: index500Scanning, progress: index500Progress }}
+            wick={{ data: wickData, scanning: wickScanning, progress: wickProgress }}
             watchlistCount={customRows.length}
             onOpen={setView}
+          />
+        )}
+
+        {view === 'wick' && (
+          <WickReversalView
+            data={wickData}
+            scanning={wickScanning}
+            progress={wickProgress}
+            scanError={wickScanError}
+            loadError={wickError && wickError !== 'no-wick-yet' ? wickError : null}
+            onScan={runWickScan}
+            queued={refreshing || index500Scanning}
+            interval={wickInterval}
+            onIntervalChange={setWickInterval}
           />
         )}
 
@@ -4463,27 +4435,16 @@ export default function App() {
             scanError={index500ScanError}
             loadError={index500Error && index500Error !== 'no-analysis-yet' ? index500Error : null}
             onScan={runIndex500Scan}
-            queued={refreshing || bullishScanning}
+            queued={refreshing || wickScanning}
           />
         )}
 
         {view === 'journal' && <TradeJournalView />}
         {view === 'expenses' && <ExpensesView />}
-        {view === 'bullish' && (
-          <BullishStocksView
-            data={bullishData}
-            scanning={bullishScanning}
-            progress={bullishProgress}
-            scanError={bullishScanError}
-            loadError={bullishError}
-            onScan={runBullishScan}
-            queued={refreshing}
-          />
-        )}
         {view === 'reversal' && (data
           ? <ReversalTable rows={data.reversals ?? []} />
           : <ScanPending scanning={refreshing} progress={refreshProgress} error={refreshError ?? loadFailure}
-              onScan={refreshAll} what="Reversal Watch" queued={bullishScanning} queuedBehind="Bullish ranking"
+              onScan={refreshAll} what="Reversal Watch" queued={index500Scanning} queuedBehind="the running scan"
               description="Scans the Nifty 500 for candlestick-confirmed reversal setups in beaten-down names." />)}
         {view === 'lookup' && (
           <WatchlistTable rows={customRows} expanded={expanded} setExpanded={setExpanded}

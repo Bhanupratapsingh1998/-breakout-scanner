@@ -2,7 +2,6 @@ package com.javawarriors.breakout.bullish;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.javawarriors.breakout.bullish.MarketRegimeAnalyzer.IndexState;
 import com.javawarriors.breakout.bullish.MarketRegimeAnalyzer.Regime;
 import com.javawarriors.breakout.model.Bar;
 
@@ -10,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -21,29 +19,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The API contract, exercised through real MVC routing with a stubbed service.
+ * What is left of the bullish API after the Bullish Stocks tab was removed: one endpoint, scoring
+ * one symbol.
+ *
+ * <p>It is not dead code kept for tidiness. My Watchlist calls it for every followed stock, so the
+ * row shape asserted below is the contract that tab renders against - which is why these tests
+ * check the whole breakdown rather than just a 200.
  *
  * <p>Standalone MockMvc rather than {@code @SpringBootTest}: the application context needs a
  * Postgres datasource for the trade journal, and an API-shape test that cannot run without a
- * database is a test that stops being run. Routing, status codes and the JSON shape are what this
- * needs to cover, and standalone setup covers all three.
+ * database is a test that stops being run.
  */
 class BullishStocksControllerTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final BullishConfig cfg = new BullishConfig();
 
-    /** A service whose scan has already produced a payload built from one real analysis. */
-    private BullishStocksService serviceWithResults() {
-        return new BullishStocksService(cfg) {
-            @Override
-            public Map<String, Object> results() {
-                return samplePayload();
-            }
-        };
-    }
-
-    private Map<String, Object> samplePayload() {
+    /** One real analysis, served as though the symbol had just been looked up. */
+    private Map<String, Object> sampleRow() {
         // 265 bars: past bullish.min-bars=250, which is what the engine needs for EMA200 plus the
         // 126-session six-month return window.
         List<Bar> bars = SeriesBuilder.startingAt(100)
@@ -54,115 +47,55 @@ class BullishStocksControllerTest {
         BullishStockResult result = new BullishStockAnalyzer(cfg)
                 .analyze("TEST.NS", "Test Company", "NIFTY_500", "IT", bars, index, index, regime);
 
-        List<BullishStockResult> ranked = new ArrayList<>();
-        ranked.add(result);
-        return BullishStocksService.buildPayload(ranked, regime, 500, 3, cfg);
+        Map<String, Object> row = result.toRow();
+        row.put("marketRegime", regime.toRow());
+        return row;
     }
 
-    @Test
-    void theRankedListCarriesEverythingTheDashboardHeaderNeeds() throws Exception {
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new BullishStocksController(serviceWithResults())).build();
-
-        mvc.perform(get("/api/bullish-stocks"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.marketRegime.regime").exists())
-                .andExpect(jsonPath("$.analyzedStockCount").value(1))
-                .andExpect(jsonPath("$.universeSize").value(500))
-                .andExpect(jsonPath("$.bullishStockCount").exists())
-                .andExpect(jsonPath("$.aPlusCount").exists())
-                .andExpect(jsonPath("$.breakoutCount").exists())
-                .andExpect(jsonPath("$.pullbackCount").exists())
-                .andExpect(jsonPath("$.timestamp").exists())
-                .andExpect(jsonPath("$.stocks").isArray());
-    }
-
-    @Test
-    void eachStockCarriesItsFullBreakdownPatternPlanAndExplanation() throws Exception {
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new BullishStocksController(serviceWithResults())).build();
-
-        String json = mvc.perform(get("/api/bullish-stocks"))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-
-        JsonNode stock = mapper.readTree(json).get("stocks").get(0);
-
-        assertEquals(1, stock.get("rank").asInt());
-        assertEquals("TEST.NS", stock.get("symbol").asText());
-        assertEquals("Test Company", stock.get("name").asText());
-        assertTrue(stock.has("score"));
-        assertTrue(stock.has("classification"));
-        assertTrue(stock.has("tradeStatus"));
-        assertTrue(stock.has("setupStage"));
-        assertFalse(stock.get("whyBullish").asText().isBlank(), "section 14 asks for the why");
-
-        JsonNode components = stock.get("scoreBreakdown").get("components");
-        assertEquals(8, components.size(), "all eight components must reach the dashboard");
-        for (String name : new String[] {"trend", "relativeStrength", "momentum", "volume",
-                "priceStructure", "patternQuality", "breakoutQuality", "riskReward"}) {
-            assertTrue(components.has(name), "missing component " + name);
-            assertTrue(components.get(name).has("points"));
-            assertTrue(components.get(name).has("maxPoints"));
-        }
-
-        for (String name : new String[] {"trend", "momentum", "relativeStrength", "volume",
-                "pattern", "breakout", "overextension", "tradePlan", "higherTimeframes"}) {
-            assertTrue(stock.has(name), "missing section " + name);
-        }
-
-        JsonNode summary = stock.get("summary");
-        for (String name : new String[] {"patternName", "trendLabel", "rsLabel", "rsi", "adx",
-                "volumeRatio", "entry", "stopLoss", "target", "riskReward"}) {
-            assertTrue(summary.has(name), "the table row needs a flat " + name);
-        }
-    }
-
-    @Test
-    void aScoreNeverExceedsOneHundredInTheServedPayload() throws Exception {
-        JsonNode stock = mapper.valueToTree(samplePayload()).get("stocks").get(0);
-        double score = stock.get("score").asDouble();
-
-        assertTrue(score >= 0 && score <= 100, "score was " + score);
-    }
-
-    @Test
-    void noResultsYetIsAFourOhFourRatherThanAnEmptyList() throws Exception {
-        BullishStocksService empty = new BullishStocksService(cfg) {
+    private MockMvc mvcServing(Map<String, Object> row) {
+        BullishStocksService stub = new BullishStocksService(cfg) {
             @Override
-            public Map<String, Object> results() {
-                return null;
+            public Map<String, Object> analyzeOne(String symbol) {
+                return row;
             }
         };
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new BullishStocksController(empty)).build();
-
-        mvc.perform(get("/api/bullish-stocks")).andExpect(status().isNotFound());
+        return MockMvcBuilders.standaloneSetup(new BullishStocksController(stub)).build();
     }
 
     @Test
-    void aSecondScanRequestWhileOneIsRunningIsRejected() throws Exception {
-        BullishStocksService busy = new BullishStocksService(cfg) {
-            @Override
-            public boolean triggerScan() {
-                return false;
-            }
-        };
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new BullishStocksController(busy)).build();
-
-        mvc.perform(post("/api/bullish-stocks/scan"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.status").value("already-running"));
-    }
-
-    @Test
-    void statusReportsWhetherAScanIsRunning() throws Exception {
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new BullishStocksController(new BullishStocksService(cfg))).build();
-
-        mvc.perform(get("/api/bullish-stocks/status"))
+    void oneSymbolCarriesTheFullBreakdownPatternPlanAndExplanation() throws Exception {
+        // Every field My Watchlist's table and its expanded panel read.
+        mvcServing(sampleRow()).perform(get("/api/bullish-stocks/TEST.NS"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.running").value(false))
-                .andExpect(jsonPath("$.cachedSeries").exists());
+                .andExpect(jsonPath("$.symbol").value("TEST.NS"))
+                .andExpect(jsonPath("$.score").isNumber())
+                .andExpect(jsonPath("$.classification").exists())
+                .andExpect(jsonPath("$.tradeStatus").exists())
+                .andExpect(jsonPath("$.setupStage").exists())
+                .andExpect(jsonPath("$.whyBullish").isNotEmpty())
+                .andExpect(jsonPath("$.scoreBreakdown.components.trend.points").isNumber())
+                .andExpect(jsonPath("$.pattern.name").exists())
+                .andExpect(jsonPath("$.trend.label").exists())
+                .andExpect(jsonPath("$.momentum.rsi").isNumber())
+                .andExpect(jsonPath("$.volume.currentRatio").isNumber())
+                .andExpect(jsonPath("$.relativeStrength.excess3mPct").isNumber())
+                .andExpect(jsonPath("$.overextension.level").exists())
+                .andExpect(jsonPath("$.tradePlan.present").exists())
+                .andExpect(jsonPath("$.marketRegime").exists());
+    }
+
+    @Test
+    void aScoreNeverExceedsOneHundredInTheServedPayload() {
+        JsonNode row = mapper.valueToTree(sampleRow());
+        double score = row.get("score").asDouble();
+
+        assertTrue(score >= 0 && score <= 100, "score out of range: " + score);
+        JsonNode components = row.get("scoreBreakdown").get("components");
+        components.fields().forEachRemaining(e -> {
+            double points = e.getValue().get("points").asDouble();
+            double max = e.getValue().get("maxPoints").asDouble();
+            assertTrue(points <= max, e.getKey() + " scored " + points + " of " + max);
+        });
     }
 
     @Test
@@ -178,5 +111,30 @@ class BullishStocksControllerTest {
         mvc.perform(get("/api/bullish-stocks/NOSUCH.NS"))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void theRankingEndpointsWentWithTheTab() throws Exception {
+        // The list, the scan trigger and the status poll all belonged to the removed tab. Asserting
+        // they are gone keeps them from creeping back as dead routes nothing calls.
+        MockMvc mvc = mvcServing(sampleRow());
+
+        // "/api/bullish-stocks" now matches nothing; only "/{symbol}" is mapped.
+        mvc.perform(post("/api/bullish-stocks/scan")).andExpect(status().is4xxClientError());
+        mvc.perform(get("/api/bullish-stocks")).andExpect(status().is4xxClientError());
+
+        // And the retired names must 404 rather than being read as tickers. Without this guard
+        // "/status" is a symbol called STATUS.NS, and a stale poller sends a live upstream fetch
+        // every 1.5 seconds to be answered with a 502.
+        mvc.perform(get("/api/bullish-stocks/status")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/bullish-stocks/results")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void anOrdinarySymbolIsStillLookedUpNormally() throws Exception {
+        // The guard above must not turn into a filter that eats real tickers.
+        mvcServing(sampleRow()).perform(get("/api/bullish-stocks/TATAELXSI.NS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.score").isNumber());
     }
 }
