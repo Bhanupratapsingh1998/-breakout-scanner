@@ -12,6 +12,13 @@ import java.util.Map;
  * close landed 88% of the range away from the extreme it rejected can be disagreed with, which is
  * the point.
  *
+ * <p><b>Two fields carry a different quantity for a double bottom.</b> A W has no rejection wick
+ * and nothing it "took back", so {@code wickToBody} carries how closely the two feet match as a
+ * percentage, and {@code recoveredPct} carries the bounce between them as a percentage of the
+ * group's range. {@code invalidationLevel} is the shelf the feet stand on rather than the group's
+ * extreme. Anything rendering these must branch on {@code shape} - reading them with the wick
+ * meaning produces a sentence that is simply false.
+ *
  * <p>{@code direction} says which way the rejection points, and several fields are read relative to
  * it: {@code wickToBody} measures the lower wick for a bullish signal and the upper one for a
  * bearish one, {@code closePosition} measures distance from the rejected extreme, and
@@ -19,7 +26,7 @@ import java.util.Map;
  */
 public record WickSignal(
         String symbol, String companyName, String sector,
-        String interval, int candles, String mergedInterval, String direction,
+        String interval, int candles, String mergedInterval, String direction, String shape,
         long signalTime, int barsAgo,
         double firstOpen, double firstHigh, double firstLow, double firstClose,
         double secondOpen, double secondHigh, double secondLow, double secondClose,
@@ -30,6 +37,13 @@ public record WickSignal(
         double price, double triggerLevel, double invalidationLevel, double riskPct,
         String status, String statusReason,
         double score, Map<String, Double> scoreParts) {
+
+    /** One end of the merged candle was rejected: a long wick against the prior move. */
+    public static final String REJECTION_WICK = "REJECTION_WICK";
+    /** The group tested one level twice with a bounce between - a W, invisible once merged. */
+    public static final String DOUBLE_BOTTOM = "DOUBLE_BOTTOM";
+    /** Its mirror: one level tested twice from below, an M. */
+    public static final String DOUBLE_TOP = "DOUBLE_TOP";
 
     /** Sellers pushed price down and lost it back - a long lower wick. */
     public static final String BULLISH = "BULLISH";
@@ -47,6 +61,10 @@ public record WickSignal(
     public static final List<String> SCORE_KEYS =
             List.of("wick", "recovery", "priorMove", "atExtreme", "volume");
 
+    /** A W scores its base quality where a wick signal scores its wick; the rest is shared. */
+    public static final List<String> DOUBLE_SCORE_KEYS =
+            List.of("base", "recovery", "priorMove", "atExtreme", "volume");
+
     public boolean bullish() {
         return BULLISH.equals(direction);
     }
@@ -60,6 +78,7 @@ public record WickSignal(
         row.put("candles", candles);
         row.put("mergedInterval", mergedInterval);
         row.put("direction", direction);
+        row.put("shape", shape);
         row.put("signalTime", signalTime);
         row.put("barsAgo", barsAgo);
 

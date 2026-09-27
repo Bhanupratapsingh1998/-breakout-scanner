@@ -26,7 +26,7 @@ public class WickReversalConfig {
      * bars, so the UI filter between them costs nothing - the fetch, not the arithmetic, is what a
      * scan spends its time on.
      */
-    private List<Integer> candleCounts = List.of(2, 3);
+    private List<Integer> candleCounts = List.of(2, 3, 4);
 
     /**
      * Which way round to look. Bullish is the setup as drawn - a drop bought back into a long lower
@@ -72,6 +72,15 @@ public class WickReversalConfig {
      * the reference images from a plain long-legged candle: the last candle has to finish the job.
      */
     private double minClosePosition = 0.5;
+
+    /** Whether to look for the W and its mirror as well as the wick shapes. */
+    private boolean doubleEnabled = true;
+
+    /** How closely the two feet of a W must agree, as a fraction of the level itself. */
+    private double doubleLevelTolerance = 0.01;
+
+    /** How far the bounce between the feet must lift, in the group's own ranges. */
+    private double doubleMinBounce = 0.2;
 
     /** Rows returned by one scan. */
     private int maxResults = 100;
@@ -140,6 +149,12 @@ public class WickReversalConfig {
 
     public List<String> getDirections() { return directions; }
     public void setDirections(List<String> v) { this.directions = v; }
+    public boolean isDoubleEnabled() { return doubleEnabled; }
+    public void setDoubleEnabled(boolean v) { this.doubleEnabled = v; }
+    public double getDoubleLevelTolerance() { return doubleLevelTolerance; }
+    public void setDoubleLevelTolerance(double v) { this.doubleLevelTolerance = v; }
+    public double getDoubleMinBounce() { return doubleMinBounce; }
+    public void setDoubleMinBounce(double v) { this.doubleMinBounce = v; }
     public List<Integer> getCandleCounts() { return candleCounts; }
     public void setCandleCounts(List<Integer> v) { this.candleCounts = v; }
     public List<String> getIntervals() { return intervals; }

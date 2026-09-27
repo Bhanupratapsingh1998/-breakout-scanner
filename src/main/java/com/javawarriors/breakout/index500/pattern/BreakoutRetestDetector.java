@@ -45,8 +45,9 @@ public final class BreakoutRetestDetector implements PatternDetector {
         double stop = level - 0.5 * s.lastAtr;
         double resistance = s.nearestResistanceAbove(s.price);
         double target = Double.isNaN(resistance) ? s.price + 3 * s.lastAtr : resistance;
-        double risk = s.price - stop;
-        double rr = risk > 0 ? (target - s.price) / risk : Double.NaN;
+        TradeLevels levels = TradeLevels.of(s.price, level, stop, target, s.lastAtr);
+        target = levels.target();
+        double rr = levels.riskReward();
 
         double confidence = 6.0;
         if (s.price > s.lastEma20) confidence += 1.0;              // holding above the fast mean
@@ -60,6 +61,7 @@ public final class BreakoutRetestDetector implements PatternDetector {
                 level, resistance, level, s.price, target, stop, rr,
                 PatternResult.CONFIRMED,
                 String.format("Broke %.2f %d sessions ago and is back within %.1f%% of it, with the old"
-                        + " resistance now acting as support.", level, b.barsSinceBreakout(), b.distancePct()));
+                        + " resistance now acting as support.", level, b.barsSinceBreakout(), b.distancePct())
+                        + (levels.hasRoom() ? "" : levels.noRoomNote()));
     }
 }

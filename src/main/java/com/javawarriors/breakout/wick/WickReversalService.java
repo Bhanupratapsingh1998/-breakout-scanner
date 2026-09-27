@@ -46,6 +46,7 @@ public class WickReversalService {
     private final WickReversalConfig cfg;
     private final SectorService sectors;
     private final WickReversalDetector detector;
+    private final DoubleBottomDetector doubleBottom;
     private final YahooDataSource source = new YahooDataSource();
 
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -56,10 +57,11 @@ public class WickReversalService {
     private final AtomicReference<String> lastInterval = new AtomicReference<>(null);
 
     public WickReversalService(WickReversalConfig cfg, SectorService sectors,
-                               WickReversalDetector detector) {
+                               WickReversalDetector detector, DoubleBottomDetector doubleBottom) {
         this.cfg = cfg;
         this.sectors = sectors;
         this.detector = detector;
+        this.doubleBottom = doubleBottom;
     }
 
     public boolean triggerScan(String requested) {
@@ -141,8 +143,11 @@ public class WickReversalService {
             boolean cached = BarCache.peek(meta.symbol(), range, interval) != null;
             try {
                 List<Bar> bars = BarCache.series(source, meta.symbol(), range, interval);
-                for (WickSignal signal : detector.detectAll(meta.symbol(), meta.companyName(),
-                        meta.sector(), interval, bars, cfg)) {
+                List<WickSignal> hits = new ArrayList<>(detector.detectAll(meta.symbol(),
+                        meta.companyName(), meta.sector(), interval, bars, cfg));
+                hits.addAll(doubleBottom.detectAll(meta.symbol(), meta.companyName(),
+                        meta.sector(), interval, bars, cfg));
+                for (WickSignal signal : hits) {
                     if (signal.score() >= cfg.getMinScore()) found.add(signal);
                 }
                 scanned++;
@@ -166,15 +171,17 @@ public class WickReversalService {
      * Caps each direction-and-group-size bucket separately, then interleaves them into one list.
      *
      * <p>A single global cap would quietly starve whichever bucket produced more signals - and
-     * worse, it would shrink the bullish two-candle view simply because bearish or three-candle
-     * groups exist, which is a filter changing results it has no business touching. Each bucket
+     * worse, it would shrink the bullish two-candle wick view simply because bearish, three-candle
+     * or double-bottom groups exist, which is a filter changing results it has no business
+     * touching. Each bucket
      * gets its own budget, so selecting one shows as full a list as it would have if none of the
      * others were ever detected.
      */
     static List<WickSignal> capPerGroupSize(List<WickSignal> found, WickReversalConfig cfg) {
         Map<String, List<WickSignal>> bySize = new LinkedHashMap<>();
         for (WickSignal s : found) {
-            bySize.computeIfAbsent(s.direction() + "/" + s.candles(), k -> new ArrayList<>()).add(s);
+            bySize.computeIfAbsent(s.shape() + "/" + s.direction() + "/" + s.candles(),
+                    k -> new ArrayList<>()).add(s);
         }
 
         List<WickSignal> out = new ArrayList<>();
@@ -194,7 +201,7 @@ public class WickReversalService {
      * Within the same candle the score decides, and the smaller group breaks a remaining tie - a
      * rejection that needed fewer candles to complete is the tighter reading of the same extreme.
      */
-    static Comparator<WickSignal> ranking() {
+    public static Comparator<WickSignal> ranking() {
         return Comparator.comparingInt(WickSignal::barsAgo)
                 .thenComparing(Comparator.comparingDouble(WickSignal::score).reversed())
                 .thenComparingInt(WickSignal::candles);

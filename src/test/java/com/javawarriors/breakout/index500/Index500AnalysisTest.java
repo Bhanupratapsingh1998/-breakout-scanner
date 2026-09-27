@@ -2,6 +2,10 @@ package com.javawarriors.breakout.index500;
 
 import com.javawarriors.breakout.bullish.BullishConfig;
 import com.javawarriors.breakout.bullish.IndicatorSnapshot;
+import com.javawarriors.breakout.wick.DoubleBottomDetector;
+import com.javawarriors.breakout.wick.WickReversalConfig;
+import com.javawarriors.breakout.wick.WickReversalDetector;
+import com.javawarriors.breakout.wick.WickSignal;
 import com.javawarriors.breakout.index500.pattern.PatternRegistry;
 import com.javawarriors.breakout.index500.pattern.PatternResult;
 import com.javawarriors.breakout.model.Bar;
@@ -9,6 +13,7 @@ import com.javawarriors.breakout.model.Bar;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -28,8 +33,10 @@ class Index500AnalysisTest {
     private final PerformanceRankingService ranking = new PerformanceRankingService();
     private final SectorAnalysisService sectorAnalysis = new SectorAnalysisService();
 
-    private final Index500AnalysisService service =
-            new Index500AnalysisService(cfg, new SectorService(), patternAnalysis, scoring);
+    private final WickReversalConfig wickCfg = new WickReversalConfig();
+    private final Index500AnalysisService service = new Index500AnalysisService(
+            cfg, new SectorService(), patternAnalysis, scoring,
+            new WickReversalDetector(), new DoubleBottomDetector(), wickCfg);
 
     private static StockMetadata meta(String symbol, String sector) {
         return new StockMetadata(symbol, symbol.replace(".NS", ""), sector, sector, "NSE", "Nifty 500");
@@ -223,6 +230,97 @@ class Index500AnalysisTest {
             // by the user on every row, so the article has to agree with the name it introduces.
             assertFalse(reason.matches("(?s)^A [aeiou].*"), "wrong article in: " + reason);
             assertFalse(reason.matches("(?s)^An [^aeiou].*"), "wrong article in: " + reason);
+        }
+    }
+
+    @Test
+    void everyAnalysedRowCarriesTheWickEnginesReadingOfTheSameBars() {
+        // The detail view shows both, so the row has to hold both. They come from one pass over one
+        // set of bars - if this ever needs a second fetch, something has gone wrong.
+        Index500Analysis r = analyse("FELL.NS", "IT", Index500TestSeries.fellThenTurned());
+
+        assertTrue(r.analysed());
+        assertNotNull(r.wickSignals(), "the list is always present, even when empty");
+        for (WickSignal w : r.wickSignals()) {
+            assertEquals("FELL.NS", w.symbol(), "a row must not carry another stock's signal");
+            assertEquals("1d", w.interval(), "Index 500 is a daily scan");
+            assertTrue(w.score() > 0);
+        }
+    }
+
+    @Test
+    void aStockWithNoUsableDataCarriesAnEmptyWickListRatherThanNull() {
+        Index500Analysis r = analyse("THIN.NS", "IT",
+                Index500TestSeries.fellThenTurned().subList(0, 10));
+
+        assertFalse(r.analysed());
+        assertNotNull(r.wickSignals());
+        assertTrue(r.wickSignals().isEmpty());
+        assertTrue(r.toRow().containsKey("analysed"), "the unavailable row is still a row");
+    }
+
+    @Test
+    void theWickSignalsReachTheApiPayload() {
+        Index500Analysis r = analyse("FELL.NS", "IT", Index500TestSeries.fellThenTurned());
+        var row = r.toRow();
+
+        assertTrue(row.containsKey("wickSignals"), "the detail view reads this key");
+        assertEquals(r.wickSignals().size(), row.get("wickCount"));
+    }
+
+    @Test
+    void aQuotedRiskRewardIsMeasuredFromAnEntryAReaderCouldActuallyTake() {
+        // The defect this guards: reward was measured from today's close while the row displayed
+        // the pattern candle's high as the breakout, so a stock that had run up to just under
+        // resistance printed "breakout 742.83, target 807, R:R 0.01" - three numbers from three
+        // different moments. Every quoted ratio must reconcile with the levels beside it.
+        for (List<Bar> series : List.of(Index500TestSeries.fellThenTurned(),
+                Index500TestSeries.steadyUptrend(), Index500TestSeries.stillFalling())) {
+            for (PatternResult p : analyse("X.NS", "IT", series).patterns()) {
+                Map<String, Object> row = p.toRow();
+                if (!row.containsKey("riskReward")) continue;
+
+                double rr = (double) row.get("riskReward");
+                double target = (double) row.get("target");
+                double stop = (double) row.get("stopLoss");
+                double breakout = row.containsKey("breakoutLevel")
+                        ? (double) row.get("breakoutLevel") : Double.NaN;
+                double price = (double) row.get("currentPrice");
+                double entry = Double.isNaN(breakout) ? price : Math.max(price, breakout);
+
+                assertTrue(target > entry,
+                        p.patternName() + " quotes a target at or below its own entry");
+                assertEquals((target - entry) / (entry - stop), rr, 0.02,
+                        p.patternName() + " ratio does not match its own levels");
+            }
+        }
+    }
+
+    @Test
+    void noPatternQuotesATargetEqualToItsBreakout() {
+        // 141 of 780 did, live: buy at X, sell at X. Absent is the honest answer, not zero.
+        for (List<Bar> series : List.of(Index500TestSeries.fellThenTurned(),
+                Index500TestSeries.steadyUptrend())) {
+            for (PatternResult p : analyse("X.NS", "IT", series).patterns()) {
+                Map<String, Object> row = p.toRow();
+                if (!row.containsKey("target") || !row.containsKey("breakoutLevel")) continue;
+                assertNotEquals((double) row.get("breakoutLevel"), (double) row.get("target"), 0.001,
+                        p.patternName() + " has target == breakout");
+            }
+        }
+    }
+
+    @Test
+    void aPatternWithNoTargetSaysWhyRatherThanLeavingTheRowDangling() {
+        // The row prints "no target - see above", so every detector that can withhold a target has
+        // to actually write the reason. Four of the five did not, and pointed at nothing.
+        for (List<Bar> series : List.of(Index500TestSeries.fellThenTurned(),
+                Index500TestSeries.steadyUptrend(), Index500TestSeries.stillFalling())) {
+            for (PatternResult p : analyse("X.NS", "IT", series).patterns()) {
+                if (p.toRow().containsKey("target")) continue;
+                assertTrue(p.explanation().contains("no room to a target"),
+                        p.patternName() + " withholds a target without saying why: " + p.explanation());
+            }
         }
     }
 

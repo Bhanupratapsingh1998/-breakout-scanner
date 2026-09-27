@@ -42,14 +42,16 @@ public final class HigherHighHigherLowDetector implements PatternDetector {
 
         double target = lastHigh + (lastHigh - lastLow);
         double stop = lastLow - 0.5 * s.lastAtr;
-        double risk = s.price - stop;
-        double rr = risk > 0 ? (target - s.price) / risk : Double.NaN;
+        TradeLevels levels = TradeLevels.of(s.price, lastHigh, stop, target, s.lastAtr);
+        target = levels.target();
+        double rr = levels.riskReward();
 
         return new PatternResult(s.symbol, type(), displayName(), true, confidence,
                 s.bars.get(s.swingLows.get(s.swingLows.size() - 1)).time(),
                 lastLow, lastHigh, lastHigh, s.price, target, stop, rr,
                 s.price > lastHigh ? PatternResult.CONFIRMED : PatternResult.WAIT_FOR_BREAKOUT,
                 String.format("Last swing low %.2f is above the one before it, under a higher high at"
-                        + " %.2f - the structure has turned.", lastLow, lastHigh));
+                        + " %.2f - the structure has turned.", lastLow, lastHigh)
+                        + (levels.hasRoom() ? "" : levels.noRoomNote()));
     }
 }

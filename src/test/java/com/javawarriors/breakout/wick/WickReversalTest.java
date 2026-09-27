@@ -453,7 +453,8 @@ class WickReversalTest {
     private static WickSignal bearishLike(WickSignal t, int candles, int barsAgo, double score) {
         WickSignal b = like(t, candles, barsAgo, score);
         return new WickSignal(b.symbol() + "B", b.companyName(), b.sector(), b.interval(),
-                b.candles(), b.mergedInterval(), WickSignal.BEARISH, b.signalTime(), b.barsAgo(),
+                b.candles(), b.mergedInterval(), WickSignal.BEARISH, b.shape(),
+                b.signalTime(), b.barsAgo(),
                 b.firstOpen(), b.firstHigh(), b.firstLow(), b.firstClose(),
                 b.secondOpen(), b.secondHigh(), b.secondLow(), b.secondClose(),
                 b.mergedOpen(), b.mergedHigh(), b.mergedLow(), b.mergedClose(),
@@ -467,7 +468,8 @@ class WickReversalTest {
     /** The same signal with only the fields the ranking and the cap look at changed. */
     private static WickSignal like(WickSignal t, int candles, int barsAgo, double score) {
         return new WickSignal(t.symbol() + candles + barsAgo, t.companyName(), t.sector(),
-                t.interval(), candles, t.mergedInterval(), t.direction(), t.signalTime(), barsAgo,
+                t.interval(), candles, t.mergedInterval(), t.direction(), t.shape(),
+                t.signalTime(), barsAgo,
                 t.firstOpen(), t.firstHigh(), t.firstLow(), t.firstClose(),
                 t.secondOpen(), t.secondHigh(), t.secondLow(), t.secondClose(),
                 t.mergedOpen(), t.mergedHigh(), t.mergedLow(), t.mergedClose(),
