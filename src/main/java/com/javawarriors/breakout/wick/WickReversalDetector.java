@@ -167,7 +167,7 @@ public class WickReversalDetector {
 
         return new WickSignal(symbol, companyName, sector,
                 interval, count, WickReversalConfig.mergedLabel(interval, count),
-                bullish ? WickSignal.BULLISH : WickSignal.BEARISH,
+                bullish ? WickSignal.BULLISH : WickSignal.BEARISH, WickSignal.REJECTION_WICK,
                 last.time(), base.size() - 1 - i,
                 first.open(), first.high(), first.low(), first.close(),
                 last.open(), last.high(), last.low(), last.close(),
@@ -284,7 +284,7 @@ public class WickReversalDetector {
      * inside has not broken it — the same rule the breakout analyzer applies, and the reason this
      * scan does not report a spike as a confirmation.
      */
-    static String[] statusOf(List<Bar> base, int i, Bar m, boolean bullish) {
+    public static String[] statusOf(List<Bar> base, int i, Bar m, boolean bullish) {
         for (int k = i + 1; k < base.size(); k++) {
             double close = base.get(k).close();
             if (close > m.high()) {
@@ -320,7 +320,7 @@ public class WickReversalDetector {
     }
 
     /** 25 - how much of the move the last candle actually took back. */
-    static double recoveryPoints(double closePosition) {
+    public static double recoveryPoints(double closePosition) {
         if (closePosition >= 0.85) return 25;
         if (closePosition >= 0.7) return 19;
         if (closePosition >= 0.6) return 13;
@@ -335,7 +335,7 @@ public class WickReversalDetector {
      * knife highest precisely because it had fallen furthest. The same holds upside down for a
      * bearish signal caught in the middle of a vertical rally.
      */
-    static double priorMovePoints(double moveInRanges) {
+    public static double priorMovePoints(double moveInRanges) {
         if (moveInRanges < 1.2) return 5;
         if (moveInRanges < 2) return 12;
         if (moveInRanges <= 4) return 20;
@@ -344,7 +344,7 @@ public class WickReversalDetector {
     }
 
     /** 15 - whether the group marks the extreme rather than sitting inside one. */
-    static double extremePoints(double distanceInRanges) {
+    public static double extremePoints(double distanceInRanges) {
         if (distanceInRanges <= 0.05) return 15;
         if (distanceInRanges <= 0.5) return 11;
         if (distanceInRanges <= 1.5) return 6;
@@ -352,7 +352,7 @@ public class WickReversalDetector {
     }
 
     /** 10 - conviction behind the group. */
-    static double volumePoints(double volumeRatio) {
+    public static double volumePoints(double volumeRatio) {
         if (volumeRatio >= 2) return 10;
         if (volumeRatio >= 1.5) return 8;
         if (volumeRatio >= 1) return 5;

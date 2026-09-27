@@ -3,8 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Fallback for the places an SVG icon is not taken: the round mark itself, already
+         sized down from the 1024px original. -->
+    <link rel="alternate icon" type="image/png" href="/brand/bps-logo.png" />
+    <link rel="apple-touch-icon" href="/brand/bps-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Breakout Scanner</title>
+    <meta name="theme-color" content="#f6f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0e1b" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="BPS TradeLab — stock scanners, technical analysis and trading strategies. Educational content only, not investment advice." />
+    <title>BPS TradeLab — Stock Scanners &amp; Technical Analysis</title>
   </head>
   <body>
     <div id="root"></div>

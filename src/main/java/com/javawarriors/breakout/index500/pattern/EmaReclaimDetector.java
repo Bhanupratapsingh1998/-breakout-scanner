@@ -83,8 +83,9 @@ public final class EmaReclaimDetector implements PatternDetector {
         double resistance = s.nearestResistanceAbove(s.price);
         double target = Double.isNaN(resistance) ? s.price + 3 * s.lastAtr : resistance;
         double stop = support - 0.5 * s.lastAtr;
-        double risk = s.price - stop;
-        double rr = risk > 0 ? (target - s.price) / risk : Double.NaN;
+        TradeLevels levels = TradeLevels.of(s.price, reclaimLevel, stop, target, s.lastAtr);
+        target = levels.target();
+        double rr = levels.riskReward();
 
         return new PatternResult(s.symbol, type(), displayName(), true, confidence,
                 s.bars.get(crossed).time(), support, Double.isNaN(resistance) ? Double.NaN : resistance,
@@ -92,6 +93,7 @@ public final class EmaReclaimDetector implements PatternDetector {
                 barsSince >= 2 ? PatternResult.CONFIRMED : PatternResult.WAIT_FOR_CONFIRMATION,
                 String.format("Closed back above its %d EMA %d session%s ago after spending most of the"
                                 + " prior %d below it.",
-                        period, barsSince, barsSince == 1 ? "" : "s", BELOW_LOOKBACK));
+                        period, barsSince, barsSince == 1 ? "" : "s", BELOW_LOOKBACK)
+                        + (levels.hasRoom() ? "" : levels.noRoomNote()));
     }
 }

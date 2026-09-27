@@ -10,17 +10,12 @@ import java.util.Map;
 /**
  * The full single- and multi-candle pattern vocabulary, in both directions and without scoring.
  *
- * <p>Written for the intraday scanner, which has since been removed. It survives that removal
- * because the Index 500 analysis depends on it: {@code index500.pattern.CandlePatternAdapter}
- * wraps {@link #hammer} and {@link #bullishEngulfing} as two of its fifteen detectors. It is kept
- * in this package rather than moved so that the removal touched no working feature — the package
- * name is now historical, not a statement about where this can be used.
- *
- * <p>Deliberately separate from {@code candlestick.CandlestickPatternAnalyzer}, which detects three
- * bullish patterns and is wired into the daily reversal scan's 0-10 scoring. This one needs the
- * whole vocabulary in both directions and no scoring, and changing the existing analyzer to serve
- * both would alter what the daily reversal scan reports. Two small focused detectors beat one that
- * quietly changes an existing feature's output.
+ * <p>Written for the intraday scanner, and then for the Reversal Watch scan, both of which have
+ * since been removed. It survives them because two live features depend on it: Index 500's
+ * {@code index500.pattern.CandlePatternAdapter} wraps {@link #hammer} and {@link #bullishEngulfing}
+ * as two of its fifteen detectors, and the wick-reversal engine uses the same shape tests. It is
+ * kept in this package rather than moved so that each removal touched no working feature — the
+ * package name is now historical, not a statement about where this can be used.
  *
  * <p>Two pairs of patterns are the same <em>shape</em> and differ only in context: a long lower
  * wick is a Hammer after a decline and a Hanging Man after a rally; a long upper wick is an

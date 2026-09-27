@@ -2,38 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * The BPS TradeLab palette, sampled from the brand banner rather than approximated.
+ *
+ *   #0a0e1b  the banner plane          #00e5a0  the "TradeLab" mint
+ *   #101626  the panel navy            #02c78e  its up-candles
+ *   #f4f7fb  the "BPS" white           #e75966  its down-candles
+ *   #9fb0c4  its subtitle grey         #eacc70  the logo's gold ring
+ *
+ * Dark mode is the native one: it IS the banner. Light mode carries the same hues, darkened
+ * until each clears 4.5:1 against the plane it sits on, because mint at #00e5a0 reads at 1.4:1
+ * on white and a status colour nobody can read is not a status colour.
+ */
 :root {
-  --surface-1: #fcfcfb;
-  --page-plane: #f9f9f7;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #898781;
-  --gridline: #e1e0d9;
-  --border: rgba(11, 11, 11, 0.1);
-  --border-strong: rgba(11, 11, 11, 0.16);
+  --surface-1: #ffffff;
+  --page-plane: #f6f8fa;
+  --text-primary: #0a0e1b;
+  --text-secondary: #4a5a6e;
+  --text-muted: #647388;
+  --gridline: #e2e8ef;
+  --border: rgba(10, 14, 27, 0.1);
+  --border-strong: rgba(10, 14, 27, 0.18);
 
-  --status-good: #0ca30c;
-  --status-warning: #c98500;
-  --status-serious: #d9633a;
-  --status-critical: #d03b3b;
-  --status-muted: #898781;
+  --status-good: #00855d;
+  --status-warning: #8a6600;
+  --status-serious: #b8521f;
+  --status-critical: #d23b4e;
+  --status-muted: #647388;
 
-  --cat-nifty50: #2a78d6;
-  --cat-next50: #1baf7a;
-  --cat-nifty500: #e87ba4;
-  --cat-custom: #4a3aa7;
+  --cat-nifty50: #1f6fd0;
+  --cat-next50: #00855d;
+  --cat-nifty500: #c1447a;
+  --cat-custom: #6154c9;
 
-  --accent: #2a78d6;
-  /* Brand mark only. Deliberately not --status-critical: the logo should not shift
-     if the status palette is ever retuned. */
-  --logo-candle: #d03b3b;
-  --logo-bg: rgba(12, 163, 12, 0.12);
-  /* Scan button: green wash, but the label rides --text-primary so it stays black on the
-     light wash and white on the dark one. */
-  --btn-scan-bg: rgba(12, 163, 12, 0.12);
-  --btn-scan-border: rgba(12, 163, 12, 0.38);
-  --accent-wash: rgba(42, 120, 214, 0.1);
-  --shadow-md: 0 1px 2px rgba(11, 11, 11, 0.04), 0 16px 32px -12px rgba(11, 11, 11, 0.12);
+  --accent: #00855d;
+  /* The label on an --accent-filled button. A literal white fails on the dark theme's mint,
+     where the accent is bright enough to need dark text instead — so the pairing is a token,
+     not an assumption baked into each button. */
+  --on-accent: #ffffff;
+
+  /* Brand mark only. Deliberately not --status-critical / --status-good: the logo should not
+     shift if the status palette is ever retuned. */
+  --logo-candle: #d23b4e;
+  --logo-candle-up: #00855d;
+  --logo-gold: #a8801f;
+  --logo-bg: rgba(0, 133, 93, 0.1);
+  /* Scan button: accent wash, but the label rides --text-primary so it stays dark on the light
+     wash and light on the dark one. */
+  --btn-scan-bg: rgba(0, 133, 93, 0.1);
+  --btn-scan-border: rgba(0, 133, 93, 0.36);
+  --accent-wash: rgba(0, 133, 93, 0.1);
+  /* The teal bloom behind the banner's wordmark, reused so the app's brand bar is lit the same
+     way. Barely visible on the light theme by design: the banner's glow only exists because its
+     plane is dark. */
+  --brand-glow: rgba(0, 133, 93, 0.05);
+  --shadow-md: 0 1px 2px rgba(10, 14, 27, 0.05), 0 16px 32px -12px rgba(10, 14, 27, 0.14);
 
   color-scheme: light dark;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -41,33 +64,38 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --surface-1: #1a1a19;
-    --page-plane: #0d0d0d;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-    --gridline: #2c2c2a;
-    --border: rgba(255, 255, 255, 0.1);
-    --border-strong: rgba(255, 255, 255, 0.16);
+    --surface-1: #101626;
+    --page-plane: #0a0e1b;
+    --text-primary: #f4f7fb;
+    --text-secondary: #9fb0c4;
+    --text-muted: #6b7c92;
+    --gridline: #1f2839;
+    --border: rgba(244, 247, 251, 0.1);
+    --border-strong: rgba(244, 247, 251, 0.18);
 
-    --status-good: #0ca30c;
-    --status-warning: #dda520;
-    --status-serious: #ec835a;
-    --status-critical: #e66767;
-    --status-muted: #898781;
+    --status-good: #02c78e;
+    --status-warning: #eacc70;
+    --status-serious: #ee9a62;
+    --status-critical: #e75966;
+    --status-muted: #6b7c92;
 
-    --cat-nifty50: #3987e5;
-    --cat-next50: #199e70;
-    --cat-nifty500: #d55181;
-    --cat-custom: #9085e9;
+    --cat-nifty50: #4d9fff;
+    --cat-next50: #02c78e;
+    --cat-nifty500: #e86f97;
+    --cat-custom: #9b8cf5;
 
-    --accent: #3987e5;
-    --logo-candle: #e66767;
-    --logo-bg: rgba(12, 163, 12, 0.22);
-    --btn-scan-bg: rgba(12, 163, 12, 0.22);
-    --btn-scan-border: rgba(12, 163, 12, 0.45);
-    --accent-wash: rgba(57, 135, 229, 0.14);
-    --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 32px -12px rgba(0, 0, 0, 0.45);
+    --accent: #00e5a0;
+    --on-accent: #06251b;
+
+    --logo-candle: #e75966;
+    --logo-candle-up: #02c78e;
+    --logo-gold: #eacc70;
+    --logo-bg: rgba(0, 229, 160, 0.14);
+    --btn-scan-bg: rgba(0, 229, 160, 0.14);
+    --btn-scan-border: rgba(0, 229, 160, 0.42);
+    --accent-wash: rgba(0, 229, 160, 0.14);
+    --brand-glow: rgba(0, 229, 160, 0.09);
+    --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 16px 32px -12px rgba(0, 0, 0, 0.55);
   }
 }
 
@@ -81,4 +109,10 @@ body {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* The banner's centre bloom, as a background layer. Used by the brand bar so the top of the app
+   is lit the way the banner is, without shipping the image on every page. */
+.brand-bloom {
+  background-image: radial-gradient(ellipse 60% 140% at 50% 50%, var(--brand-glow), transparent 70%);
 }

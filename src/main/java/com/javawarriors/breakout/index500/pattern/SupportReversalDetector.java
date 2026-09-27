@@ -69,10 +69,16 @@ public final class SupportReversalDetector implements PatternDetector {
         confidence = Math.min(9.5, confidence);
 
         double resistance = s.nearestResistanceAbove(s.price);
-        double target = Double.isNaN(resistance) ? s.price + 3 * s.lastAtr : resistance;
         double stop = low - 0.5 * s.lastAtr;
-        double risk = s.price - stop;
-        double rr = risk > 0 ? (target - s.price) / risk : Double.NaN;
+        // This pattern's breakout level is itself a resistance, so the objective is the next one
+        // above it. Using the same level for both made target and breakout identical on 141 live
+        // rows - a plan to buy at X and sell at X.
+        double firstObjective = Double.isNaN(resistance)
+                ? s.price + 3 * s.lastAtr : s.nearestResistanceAbove(resistance);
+        if (Double.isNaN(firstObjective)) firstObjective = resistance + 3 * s.lastAtr;
+        TradeLevels levels = TradeLevels.of(s.price, resistance, stop, firstObjective, s.lastAtr);
+        double target = levels.target();
+        double rr = levels.riskReward();
 
         return new PatternResult(s.symbol, type(), displayName(), true, confidence,
                 s.bars.get(lowIdx).time(), support.level(),
@@ -80,6 +86,7 @@ public final class SupportReversalDetector implements PatternDetector {
                 Double.isNaN(resistance) ? Double.NaN : resistance, s.price, target, stop, rr,
                 s.price > s.lastEma20 ? PatternResult.CONFIRMED : PatternResult.WAIT_FOR_CONFIRMATION,
                 String.format("Turned up %.1f%% off %.2f, a level with %s, %d sessions ago.",
-                        bouncePct, support.level(), support.evidence(), barsSince));
+                        bouncePct, support.level(), support.evidence(), barsSince)
+                        + (levels.hasRoom() ? "" : levels.noRoomNote()));
     }
 }

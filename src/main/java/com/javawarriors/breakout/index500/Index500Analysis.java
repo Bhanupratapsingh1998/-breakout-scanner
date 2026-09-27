@@ -1,6 +1,7 @@
 package com.javawarriors.breakout.index500;
 
 import com.javawarriors.breakout.index500.pattern.PatternResult;
+import com.javawarriors.breakout.wick.WickSignal;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -28,6 +29,7 @@ public record Index500Analysis(
         double rsi, double adx, double atr, double volume, double avgVolume20, double volumeRatio,
         double support, double resistance,
         List<PatternResult> patterns, PatternResult bestPattern,
+        List<WickSignal> wickSignals,
         OpportunityScore score) {
 
     // Statuses, strongest evidence first. "BUY" is deliberately absent - a stock being down 40% is
@@ -50,7 +52,7 @@ public record Index500Analysis(
                 Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN,
                 Double.NaN, Double.NaN, Double.NaN, "UNKNOWN",
                 Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN,
-                Double.NaN, Double.NaN, List.of(), null, OpportunityScore.zero());
+                Double.NaN, Double.NaN, List.of(), null, List.of(), OpportunityScore.zero());
     }
 
     public String symbol() {
@@ -105,6 +107,13 @@ public record Index500Analysis(
         row.put("patternCount", patterns.size());
         row.put("bestPattern", bestPattern == null ? null : bestPattern.toRow());
         row.put("patternName", bestPattern == null ? "No clear pattern" : bestPattern.patternName());
+        // The wick engine's reading of the same bars, so the detail view can answer "is this
+        // turning right now" without the user going to another tab and running another scan.
+        List<Map<String, Object>> wickRows = new ArrayList<>();
+        for (WickSignal w : wickSignals) wickRows.add(w.toRow());
+        row.put("wickSignals", wickRows);
+        row.put("wickCount", wickSignals.size());
+
         row.put("score", score.total());
         row.put("scoreBreakdown", score.toRow());
         return row;

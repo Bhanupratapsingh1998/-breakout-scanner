@@ -69,15 +69,37 @@ public final class CandlePatternAdapter implements PatternDetector {
             double resistance = s.nearestResistanceAbove(s.price);
             double target = Double.isNaN(resistance) ? s.price + 3 * s.lastAtr : resistance;
             double stop = low - 0.5 * s.lastAtr;
-            double risk = s.price - stop;
-            double rr = risk > 0 ? (target - s.price) / risk : Double.NaN;
+
+            /*
+             * Reward is measured from the entry a reader could actually take, not from today's
+             * close, and the two are not the same thing once a pattern is a few sessions old.
+             *
+             * The old formula divided (target - price) by (price - stop) while the row displayed
+             * the pattern candle's high as the breakout. On a stock that had since run up to just
+             * under resistance that printed things like "breakout 742.83, target 807, R:R 0.01" -
+             * three numbers from three different moments, describing no trade that exists. Worse,
+             * when the pattern's own high WAS the nearest resistance, target and breakout came out
+             * identical: buy at X, sell at X.
+             *
+             * Entry is therefore max(price, breakout) - the same convention ChartPatternAdapter
+             * already used - and a target that is not above that entry is reported as absent
+             * rather than as a ratio near zero. "There is no room to the next resistance" is a
+             * real answer; "R:R 0.0:1" only looks like one.
+             */
+            TradeLevels levels = TradeLevels.of(s.price, s.high[i], stop, target, s.lastAtr);
+            boolean roomAbove = levels.hasRoom();
+            double rr = levels.riskReward();
+
+            String note = found.description()
+                    + String.format(" Printed %d session%s ago.", barsSince, barsSince == 1 ? "" : "s");
+            if (!roomAbove) note += levels.noRoomNote();
 
             return new PatternResult(s.symbol, type, displayName, true, confidence,
                     s.bars.get(i).time(), low, Double.isNaN(resistance) ? Double.NaN : resistance,
-                    s.high[i], s.price, target, stop, rr,
+                    s.high[i], s.price, levels.target(),
+                    stop, rr,
                     confirmed ? PatternResult.CONFIRMED : PatternResult.WAIT_FOR_CONFIRMATION,
-                    found.description() + String.format(" Printed %d session%s ago.",
-                            barsSince, barsSince == 1 ? "" : "s"));
+                    note);
         }
         return none;
     }

@@ -66,6 +66,11 @@ public final class CandleMerger {
         return new Bar(first.time(), first.open(), high, low, base.get(to).close(), volume);
     }
 
+    /** High minus low. Here rather than imported so the merge and its readers share one definition. */
+    public static double range(Bar b) {
+        return b.high() - b.low();
+    }
+
     /** One candle spanning both: the first one's open, the last one's close, the extremes of each. */
     public static Bar merge(Bar first, Bar second) {
         return mergeRange(List.of(first, second), 0, 1);

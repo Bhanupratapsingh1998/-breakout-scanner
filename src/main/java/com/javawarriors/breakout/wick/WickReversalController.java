@@ -86,6 +86,7 @@ public class WickReversalController {
                                      @RequestParam(required = false) String sector,
                                      @RequestParam(required = false) Integer candles,
                                      @RequestParam(required = false) String direction,
+                                     @RequestParam(required = false) String shape,
                                      @RequestParam(required = false) Double minScore,
                                      @RequestParam(required = false) Integer maxBarsAgo) {
         List<WickSignal> all = service.lastRun();
@@ -108,6 +109,8 @@ public class WickReversalController {
             if (candles != null && s.candles() != candles) continue;
             if (direction != null && !direction.isBlank() && !"ALL".equalsIgnoreCase(direction)
                     && !direction.equalsIgnoreCase(s.direction())) continue;
+            if (shape != null && !shape.isBlank() && !"ALL".equalsIgnoreCase(shape)
+                    && !shape.equalsIgnoreCase(s.shape())) continue;
             if (!matchesStatus(status, s)) continue;
             if (minScore != null && !(s.score() >= minScore)) continue;
             if (maxBarsAgo != null && !(s.barsAgo() <= maxBarsAgo)) continue;
@@ -147,6 +150,9 @@ public class WickReversalController {
         out.put("confirmedCount", rows.stream().filter(r -> WickSignal.CONFIRMED.equals(r.status())).count());
         out.put("invalidatedCount", rows.stream().filter(r -> WickSignal.INVALIDATED.equals(r.status())).count());
         out.put("freshCount", rows.stream().filter(r -> r.barsAgo() == 0).count());
+        // The count that explains why there are more signals than stocks: one stock can produce
+        // several - the same extreme read at two, three or four candles, or in both directions.
+        out.put("stockCount", rows.stream().map(WickSignal::symbol).distinct().count());
         // Per group size, so the filter can show what selecting it would give before it is clicked.
         Map<String, Long> byCandles = new LinkedHashMap<>();
         for (WickSignal r : rows) {
@@ -156,6 +162,14 @@ public class WickReversalController {
         Map<String, Long> byDirection = new LinkedHashMap<>();
         for (WickSignal r : rows) byDirection.merge(r.direction(), 1L, Long::sum);
         out.put("byDirection", byDirection);
+        Map<String, Long> byShape = new LinkedHashMap<>();
+        for (WickSignal r : rows) byShape.merge(r.shape(), 1L, Long::sum);
+        out.put("byShape", byShape);
+        // Keyed by the same strings the status filter sends, so a pill can show its own count.
+        Map<String, Long> byStatus = new LinkedHashMap<>();
+        for (WickSignal r : rows) byStatus.merge(r.status(), 1L, Long::sum);
+        byStatus.put("ALL", (long) rows.size());
+        out.put("byStatus", byStatus);
         out.put("bullishCount", byDirection.getOrDefault(WickSignal.BULLISH, 0L));
         out.put("bearishCount", byDirection.getOrDefault(WickSignal.BEARISH, 0L));
         return out;

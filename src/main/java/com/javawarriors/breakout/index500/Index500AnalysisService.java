@@ -7,6 +7,11 @@ import com.javawarriors.breakout.marketdata.BarCache;
 import com.javawarriors.breakout.marketdata.BenchmarkSource;
 import com.javawarriors.breakout.marketdata.NseIndexSource;
 import com.javawarriors.breakout.marketdata.YahooDataSource;
+import com.javawarriors.breakout.wick.DoubleBottomDetector;
+import com.javawarriors.breakout.wick.WickReversalConfig;
+import com.javawarriors.breakout.wick.WickReversalDetector;
+import com.javawarriors.breakout.wick.WickReversalService;
+import com.javawarriors.breakout.wick.WickSignal;
 import com.javawarriors.breakout.model.Bar;
 
 import org.slf4j.Logger;
@@ -48,6 +53,17 @@ public class Index500AnalysisService {
     private final SectorService sectors;
     private final PatternAnalysisService patternAnalysis;
     private final OpportunityScoreService scoring;
+    /**
+     * The wick engine, run over the same bars in the same pass.
+     *
+     * <p>Both features read 18 months of daily candles, so this costs no extra fetch - the
+     * detectors are pure functions of bars already in hand. Running them here is what lets the
+     * detail view show "and here is what it is doing right now" without the user having to run a
+     * second scan on another tab.
+     */
+    private final WickReversalDetector wickDetector;
+    private final DoubleBottomDetector doubleBottomDetector;
+    private final WickReversalConfig wickCfg;
     private final YahooDataSource source = new YahooDataSource();
 
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -58,11 +74,17 @@ public class Index500AnalysisService {
 
     public Index500AnalysisService(Index500Config cfg, SectorService sectors,
                                    PatternAnalysisService patternAnalysis,
-                                   OpportunityScoreService scoring) {
+                                   OpportunityScoreService scoring,
+                                   WickReversalDetector wickDetector,
+                                   DoubleBottomDetector doubleBottomDetector,
+                                   WickReversalConfig wickCfg) {
         this.cfg = cfg;
         this.sectors = sectors;
         this.patternAnalysis = patternAnalysis;
         this.scoring = scoring;
+        this.wickDetector = wickDetector;
+        this.doubleBottomDetector = doubleBottomDetector;
+        this.wickCfg = wickCfg;
     }
 
     public boolean triggerScan() {
@@ -165,6 +187,12 @@ public class Index500AnalysisService {
         double return6mPct = pct(s.return6m);
         double return1yPct = pct(s.trailingReturn(IndicatorSnapshot.BARS_52W));
 
+        List<WickSignal> wick = new ArrayList<>(wickDetector.detectAll(
+                meta.symbol(), meta.companyName(), meta.sector(), "1d", bars, wickCfg));
+        wick.addAll(doubleBottomDetector.detectAll(
+                meta.symbol(), meta.companyName(), meta.sector(), "1d", bars, wickCfg));
+        wick.sort(WickReversalService.ranking());
+
         SupportLevelDetector.SupportResult support = SupportLevelDetector.nearestSupport(
                 bars, s.n, s.price, 5.0, s.lastEma50, s.lastEma200);
         double resistance = s.nearestResistanceAbove(s.price);
@@ -181,7 +209,7 @@ public class Index500AnalysisService {
                 s.lastEma20, s.lastEma50, s.lastEma200, emaStatus(s),
                 s.lastRsi, s.lastAdx, s.lastAtr, s.volume[s.n - 1], s.avgVolume20, s.volumeRatio,
                 support == null ? Double.NaN : support.level(), resistance,
-                patterns, best, score);
+                patterns, best, wick, score);
     }
 
     /** A compact read of where price sits in its own moving-average stack. */
