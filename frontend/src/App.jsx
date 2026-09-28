@@ -156,7 +156,7 @@ function FilterPill({ active, onClick, children, title }) {
 /** The Dashboard / Index 500 / Wick Reversal / My Watchlist / Trade Journal / Expenses tab row —
  *  shared by the main app shell AND each tab's own "no scan yet" screen, so every tab stays
  *  reachable from anywhere rather than only after a scan has completed. */
-function ViewTabs({ view, setView, watchlistCount = 0, wickCount = 0 }) {
+function ViewTabs({ view, setView, watchlistCount = 0, wickCount = 0, fnoCount = 0 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       <FilterPill active={view === 'dashboard'} onClick={() => setView('dashboard')}>
@@ -164,6 +164,9 @@ function ViewTabs({ view, setView, watchlistCount = 0, wickCount = 0 }) {
       </FilterPill>
       <FilterPill active={view === 'index500'} onClick={() => setView('index500')}>
         Index 500 Analysis
+      </FilterPill>
+      <FilterPill active={view === 'fno'} onClick={() => setView('fno')}>
+        F&O Analysis{fnoCount > 0 ? ` (${fnoCount})` : ''}
       </FilterPill>
       <FilterPill active={view === 'wick'} onClick={() => setView('wick')}>
         Wick Reversal{wickCount > 0 ? ` (${wickCount})` : ''}
@@ -2722,7 +2725,7 @@ function BrandBanner() {
   )
 }
 
-function DashboardView({ index500, wick, watchlistCount, onOpen }) {
+function DashboardView({ index500, fno, wick, watchlistCount, onOpen }) {
   const [regime, setRegime] = useState(null)
   const [regimeError, setRegimeError] = useState(null)
   const [money, setMoney] = useState(null)
@@ -2839,6 +2842,20 @@ function DashboardView({ index500, wick, watchlistCount, onOpen }) {
             { label: 'Confirmed', value: wick.data.confirmedCount, color: 'var(--status-good)' },
           ] : null}
           onOpen={() => onOpen('wick')}
+        />
+
+        <FeatureCard
+          title="F&O Analysis"
+          description="Every stock with listed futures and options, through the same sector-then-pattern engine as the Index 500 tab — plus each contract's lot size and what one lot costs."
+          state={fno.scanning ? 'running' : fno.data ? 'ready' : 'idle'}
+          accent="var(--cat-custom)"
+          detail={fno.scanning ? (fno.progress ?? 'Scanning') : undefined}
+          metrics={fno.data ? [
+            { label: 'Stocks', value: fno.data.universeSize, color: 'var(--accent)' },
+            { label: 'Patterns', value: fno.data.patternCount, color: 'var(--accent)' },
+            { label: 'Breakouts', value: fno.data.breakoutCount, color: 'var(--status-good)' },
+          ] : null}
+          onOpen={() => onOpen('fno')}
         />
 
         <FeatureCard
@@ -3394,7 +3411,33 @@ function Index500WickPanel({ row }) {
  * bar, so the round trip costs nothing — and it keeps one definition of every threshold, which a
  * second client-side implementation of the same predicates would quietly let drift.
  */
-function Index500View({ summary, scanning, progress, scanError, loadError, onScan, queued }) {
+/**
+ * Formats a contract's rupee value compactly: an F&O lot runs from tens of thousands to tens of
+ * lakhs, and the full figure in a table cell is a column of digits nobody reads.
+ */
+function fmtLakh(v) {
+  if (!Number.isFinite(v) || v <= 0) return null
+  if (v >= 1e7) return `${(v / 1e7).toFixed(2)} Cr`
+  if (v >= 1e5) return `${(v / 1e5).toFixed(2)} L`
+  return `${Math.round(v).toLocaleString('en-IN')}`
+}
+
+/**
+ * The analysis table, for whichever universe it is pointed at.
+ *
+ * <p>One component, two tabs. The Nifty 500 and the F&O list are the same eighteen months of daily
+ * bars, the same fifteen detectors and the same score, over different symbols - so the difference
+ * between the tabs is the {@code api} prefix and the words around it, not the table. A second copy
+ * of this would be 280 lines that have to be fixed twice.
+ *
+ * @param api         the endpoint prefix, e.g. "/api/fno"
+ * @param what        the tab's name, for the empty state and the scan button
+ * @param noun        what the universe's members are called in running text
+ * @param description the one-line explanation shown before the first scan
+ */
+function Index500View({ summary, scanning, progress, scanError, loadError, onScan, queued,
+  api = '/api/index500', what = 'Index 500 Analysis', noun = 'stocks',
+  description = 'Ranks every sector by six-month performance, then finds which fallen stocks inside them are showing a confirmed reversal or breakout pattern.' }) {
   const [filters, setFilters] = useState(INDEX500_EMPTY_FILTERS)
   const [result, setResult] = useState(null)
   const [queryError, setQueryError] = useState(null)
@@ -3402,6 +3445,7 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
   const [sectorSummary, setSectorSummary] = useState(null)
   const [patterns, setPatterns] = useState({})
   const [expanded, setExpanded] = useState(null)
+  const [universe, setUniverse] = useState(null)
 
   const hasRun = !!summary
   // Every derived query keys off this, so a re-analysis refreshes the table and the heatmap
@@ -3409,21 +3453,25 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
   const generatedAt = summary?.generatedAt ?? null
 
   useEffect(() => {
-    fetch('/api/index500/patterns')
+    fetch(`${api}/patterns`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setPatterns(d?.patterns ?? {}))
       .catch(() => {})
-  }, [])
+    fetch(`${api}/universe`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setUniverse)
+      .catch(() => {})
+  }, [api])
 
   useEffect(() => {
     if (!hasRun) return undefined
     let cancelled = false
-    fetch('/api/index500/sector-summary')
+    fetch(`${api}/sector-summary`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled) setSectorSummary(d?.sectors ?? null) })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [hasRun, generatedAt])
+  }, [api, hasRun, generatedAt])
 
   // Debounced, so typing "15" into a threshold is one query rather than two.
   useEffect(() => {
@@ -3439,7 +3487,7 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
       if (filters.minVolumeRatio !== '') q.set('minVolumeRatio', filters.minVolumeRatio)
       q.set('sortBy', filters.sortBy)
       setQuerying(true)
-      fetch(`/api/index500/analysis?${q}`)
+      fetch(`${api}/analysis?${q}`)
         .then(async (r) => {
           const body = await r.json().catch(() => ({}))
           if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`)
@@ -3450,10 +3498,13 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
         .finally(() => { if (!cancelled) setQuerying(false) })
     }, 200)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [hasRun, generatedAt, filters])
+  }, [api, hasRun, generatedAt, filters])
 
   const set = (patch) => setFilters({ ...filters, ...patch })
   const rows = result?.stocks ?? []
+  // Only the F&O universe carries contract sizes; the server says so rather than the UI guessing
+  // from whether a row happens to have one.
+  const hasLots = !!result?.hasLots
 
   if (!hasRun) {
     return (
@@ -3462,10 +3513,10 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
         progress={progress}
         error={scanError ?? loadError}
         onScan={onScan}
-        what="Index 500 Analysis"
+        what={what}
         queued={queued}
         queuedBehind="another scan"
-        description="Ranks every sector by six-month performance, then finds which fallen stocks inside them are showing a confirmed reversal or breakout pattern."
+        description={description}
       />
     )
   }
@@ -3474,9 +3525,17 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {result ? `${result.matched} of ${result.universeSize} stocks match` : 'Loading…'}
+          {result ? `${result.matched} of ${result.universeSize} ${noun} match` : 'Loading…'}
           {result?.unavailableCount > 0 ? ` · ${result.unavailableCount} without usable data` : ''}
           {generatedAt ? ` · analysed ${new Date(generatedAt).toLocaleString()}` : ''}
+          {/* Membership is only ever stale for F&O, and only when NSE could not be reached. Said
+              out loud rather than left to look current, because a name that has since been added
+              to or dropped from derivatives is simply missing from, or wrongly in, this list. */}
+          {universe && universe.live === false && (
+            <span style={{ color: 'var(--status-warning)' }}>
+              {' · NSE unreachable, using a bundled list — membership and lot sizes may be out of date'}
+            </span>
+          )}
         </p>
         <div className="flex flex-col items-end gap-1">
           <button onClick={onScan} disabled={scanning}
@@ -3607,8 +3666,19 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
                       <td className="max-w-[5.5rem] truncate px-2 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
                         {row.sector}
                       </td>
+                      {/* The contract value rides under the price rather than taking a column of
+                          its own: the table already fills the shell at 17 columns, and price x lot
+                          is the number an F&O reader wants anyway - the lot alone says nothing
+                          about what the position costs. */}
                       <td className="tabular px-2 py-2.5 text-right" style={{ color: 'var(--text-primary)' }}>
                         {row.analysed ? fmtPrice(row.price) : '—'}
+                        {hasLots && (
+                          <div className="text-[10px] font-normal" style={{ color: 'var(--text-muted)' }}>
+                            {row.lotSize
+                              ? `${row.lotSize} × ${row.analysed ? fmtLakh(row.price * row.lotSize) : '—'}`
+                              : 'lot n/a'}
+                          </div>
+                        )}
                       </td>
                       <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: d1.color }}>{d1.text}</td>
                       <td className="tabular px-2 py-2.5 text-right text-xs" style={{ color: m1.color }}>{m1.text}</td>
@@ -4243,9 +4313,13 @@ function WickReversalView({ data, scanning, progress, scanError, loadError, onSc
   )
 }
 
+/** The F&O tab's one-line explanation, shared by its empty state and its dashboard card. */
+const FNO_DESCRIPTION = 'Every stock with listed futures and options - around 210 names - run through the same sector-then-pattern analysis as the Index 500 tab, with each contract’s lot size and rupee value alongside.'
+
 const VIEW_TITLES = {
   dashboard: 'Dashboard',
   index500: 'Index 500 Analysis',
+  fno: 'F&O Analysis',
   wick: 'Wick Reversal',
   lookup: 'My Watchlist',
   journal: 'Trade Journal',
@@ -4257,6 +4331,7 @@ const VIEW_SUBTITLES = {
   lookup: 'Symbols you follow, scored by the same 100-point bullish assessment as the ranked table.',
   wick: 'A sharp move taken straight back by the candle after it — merged into one bigger candle, a long lower wick off a drop is bullish, a long upper wick off a rally is bearish.',
   index500: 'Sector by sector, then stock by stock: which sectors have fallen hardest over six months, and which names inside them are showing a confirmed reversal or breakout.',
+  fno: 'The same analysis over the derivatives universe: every stock with listed futures and options, with each contract’s lot size and what one lot costs.',
   journal: 'Your delivery/swing trade log, auto-calculated performance dashboard, and 1:2 R:R calculator.',
   expenses: 'Salary, EMIs and fixed costs month by month — and what that adds up to over a year.',
 }
@@ -4281,6 +4356,16 @@ export default function App() {
   const [index500ScanError, setIndex500ScanError] = useState(null)
   const index500PollRef = useRef(null)
 
+  // The F&O tab runs the same engine over a different universe, so it carries the same five pieces
+  // of state rather than sharing the Index 500 ones - the two scan independently, and one
+  // finishing must not blank the other's table.
+  const [fnoSummary, setFnoSummary] = useState(null)
+  const [fnoError, setFnoError] = useState(null)
+  const [fnoScanning, setFnoScanning] = useState(false)
+  const [fnoProgress, setFnoProgress] = useState(null)
+  const [fnoScanError, setFnoScanError] = useState(null)
+  const fnoPollRef = useRef(null)
+
   // One interval per run: the merge is defined against a single candle size, so the scan carries
   // which one it used rather than mixing 30-minute and 2-day signals into one ranking.
   const [wickData, setWickData] = useState(null)
@@ -4293,7 +4378,7 @@ export default function App() {
 
   // One auto-start per feature per session. Without this a scan that fails would be retried on
   // every re-render that lands on its tab, which is a request loop rather than a retry.
-  const autoStarted = useRef({ index500: false, wick: false })
+  const autoStarted = useRef({ index500: false, fno: false, wick: false })
 
   /**
    * The aggregate view of the last analysis.
@@ -4316,6 +4401,59 @@ export default function App() {
     loadIndex500().catch((e) => setIndex500Error(e.message))
     return () => clearInterval(index500PollRef.current)
   }, [])
+
+  /** The F&O tab's equivalent of {@link loadIndex500}, against its own universe. */
+  function loadFno() {
+    return fetch('/api/fno/analysis?limit=1&includeUnavailable=true')
+      .then((r) => {
+        if (r.status === 404) throw new Error('no-analysis-yet')
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((d) => { setFnoSummary(d); setFnoError(null) })
+  }
+
+  useEffect(() => {
+    loadFno().catch((e) => setFnoError(e.message))
+    return () => clearInterval(fnoPollRef.current)
+  }, [])
+
+  async function runFnoScan() {
+    if (fnoScanning) return
+    setFnoScanError(null)
+    setFnoScanning(true)
+    setFnoProgress('Starting analysis…')
+    try {
+      const res = await fetch('/api/fno/scan', { method: 'POST' })
+      if (res.status !== 202 && res.status !== 409) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      fnoPollRef.current = setInterval(async () => {
+        try {
+          const st = await fetch('/api/fno/status').then((r) => r.json())
+          if (st.running) {
+            setFnoProgress(st.progress ?? 'Analysing…')
+            return
+          }
+          clearInterval(fnoPollRef.current)
+          if (st.lastResult?.error) setFnoScanError(st.lastResult.error)
+          else await loadFno()
+          setFnoScanning(false)
+          setFnoProgress(null)
+        } catch (e) {
+          clearInterval(fnoPollRef.current)
+          setFnoScanning(false)
+          setFnoProgress(null)
+          setFnoScanError(e.message || 'Lost connection to the API server')
+        }
+      }, 1500)
+    } catch (e) {
+      setFnoScanning(false)
+      setFnoProgress(null)
+      setFnoScanError(e.message || 'Could not reach the API server')
+    }
+  }
 
   async function runIndex500Scan() {
     if (index500Scanning) return
@@ -4445,18 +4583,22 @@ export default function App() {
     // costs nothing, because the first scan fills the shared bar cache and the second then
     // completes in seconds. These flags are effect dependencies, so the queued scan starts on its
     // own the moment the running one finishes.
-    const busy = index500Scanning || wickScanning
+    const busy = index500Scanning || fnoScanning || wickScanning
 
     if (view === 'index500' && !index500Summary && !busy && !autoStarted.current.index500) {
       autoStarted.current.index500 = true
       runIndex500Scan()
+    }
+    if (view === 'fno' && !fnoSummary && !busy && !autoStarted.current.fno) {
+      autoStarted.current.fno = true
+      runFnoScan()
     }
     if (view === 'wick' && !wickData && !busy && !autoStarted.current.wick) {
       autoStarted.current.wick = true
       runWickScan(wickInterval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, index500Summary, wickData, index500Scanning, wickScanning])
+  }, [view, index500Summary, fnoSummary, wickData, index500Scanning, fnoScanning, wickScanning])
 
   // No full-screen gate any more. Every view renders inside the same shell and handles its own
   // empty state, so the tab row, the header and the dashboard stay reachable at all times — the
@@ -4471,7 +4613,7 @@ export default function App() {
         <div className="mx-auto flex max-w-6xl items-center gap-2.5 px-4 py-3 sm:px-6">
           <LogoBadge size={34} />
           <Wordmark />
-          <span className="ml-auto text-xs" style={{ color: 'var(--text-muted)' }}>Nifty 500 · live NSE data</span>
+          <span className="ml-auto text-xs" style={{ color: 'var(--text-muted)' }}>Live NSE data</span>
         </div>
       </div>
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
@@ -4484,8 +4626,8 @@ export default function App() {
               {VIEW_SUBTITLES[view]}
             </p>
             <div className="mt-3">
-              <ViewTabs view={view} setView={setView}
-                watchlistCount={customRows.length} wickCount={wickData?.total ?? 0} />
+              <ViewTabs view={view} setView={setView} watchlistCount={customRows.length}
+                wickCount={wickData?.total ?? 0} fnoCount={fnoSummary?.universeSize ?? 0} />
             </div>
           </div>
         </header>
@@ -4542,6 +4684,7 @@ export default function App() {
         {view === 'dashboard' && (
           <DashboardView
             index500={{ data: index500Summary, scanning: index500Scanning, progress: index500Progress }}
+            fno={{ data: fnoSummary, scanning: fnoScanning, progress: fnoProgress }}
             wick={{ data: wickData, scanning: wickScanning, progress: wickProgress }}
             watchlistCount={customRows.length}
             onOpen={setView}
@@ -4556,7 +4699,7 @@ export default function App() {
             scanError={wickScanError}
             loadError={wickError && wickError !== 'no-wick-yet' ? wickError : null}
             onScan={runWickScan}
-            queued={index500Scanning}
+            queued={index500Scanning || fnoScanning}
             interval={wickInterval}
             onIntervalChange={setWickInterval}
           />
@@ -4570,7 +4713,23 @@ export default function App() {
             scanError={index500ScanError}
             loadError={index500Error && index500Error !== 'no-analysis-yet' ? index500Error : null}
             onScan={runIndex500Scan}
-            queued={wickScanning}
+            queued={fnoScanning || wickScanning}
+          />
+        )}
+
+        {view === 'fno' && (
+          <Index500View
+            api="/api/fno"
+            what="F&O Analysis"
+            noun="F&O stocks"
+            description={FNO_DESCRIPTION}
+            summary={fnoSummary}
+            scanning={fnoScanning}
+            progress={fnoProgress}
+            scanError={fnoScanError}
+            loadError={fnoError && fnoError !== 'no-analysis-yet' ? fnoError : null}
+            onScan={runFnoScan}
+            queued={index500Scanning || wickScanning}
           />
         )}
 
