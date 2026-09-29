@@ -78,20 +78,49 @@ function fmtVolume(v) {
   return Math.round(v).toLocaleString('en-IN')
 }
 
-function StatTile({ label, value, color }) {
-  return (
-    <div
-      className="flex flex-1 flex-col gap-2 rounded-xl border p-4"
-      style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}
-    >
-      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>
-        {color && <Dot color={color} size={7} />}
+/**
+ * One summary figure, optionally a filter.
+ *
+ * <p>With {@code onClick} it renders as a button and selecting it narrows the table to the rows
+ * it counted; without one it stays a plain figure, which is what My Watchlist wants. The element
+ * changes with the behaviour rather than a div being given a click handler, so the tile is
+ * focusable and operable from the keyboard exactly when it does something.
+ */
+function StatTile({ label, value, color, onClick, active = false, hint }) {
+  const body = (
+    <>
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide"
+        style={{ color: active ? 'var(--accent)' : 'var(--text-secondary)' }}>
+        {color && <Dot color={active ? 'var(--accent)' : color} size={7} />}
         {label}
       </div>
-      <div className="tabular text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>
+      <div className="tabular text-2xl font-semibold"
+        style={{ color: active ? 'var(--accent)' : 'var(--text-primary)' }}>
         {value}
       </div>
-    </div>
+    </>
+  )
+  const shell = 'flex flex-1 flex-col gap-2 rounded-xl border p-4'
+  const style = {
+    borderColor: active ? 'var(--accent)' : 'var(--border)',
+    background: active ? 'var(--accent-wash)' : 'var(--surface-1)',
+  }
+
+  if (!onClick) return <div className={shell} style={style}>{body}</div>
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={hint}
+      className={`${shell} min-w-[9rem] cursor-pointer text-left transition-colors`}
+      style={style}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.borderColor = 'var(--border-strong)' }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.borderColor = 'var(--border)' }}
+    >
+      {body}
+    </button>
   )
 }
 
@@ -2942,8 +2971,27 @@ const INDEX500_COLUMNS = [
   ['Vol', 'right'], ['EMA', 'left'], ['Score', 'left'], ['Status', 'left'],
 ]
 
+/**
+ * The summary tiles, in display order. {@code countKey} names the field the server publishes the
+ * count under and {@code key} the value it accepts back as {@code view} - the two halves of one
+ * agreement with {@code ResultView} on the Java side.
+ */
+const INDEX500_VIEWS = [
+  { key: 'ALL', label: 'Matching', countKey: 'matched',
+    hint: 'Every row the filters above matched' },
+  { key: 'DECLINERS', label: 'Down over 6M', countKey: 'declinerCount', color: 'var(--status-critical)',
+    hint: 'Only stocks whose six-month return is negative' },
+  { key: 'PATTERNS', label: 'Showing a pattern', countKey: 'patternCount', color: 'var(--accent)',
+    hint: 'Only stocks where at least one detector found a shape' },
+  { key: 'REVERSALS', label: 'Reversals', countKey: 'reversalCount', color: 'var(--status-good)',
+    hint: 'Only Strong reversal and Reversal watch' },
+  { key: 'BREAKOUTS', label: 'Breakouts', countKey: 'breakoutCount', color: 'var(--status-good)',
+    hint: 'Only Breakout confirmed and Breakout candidate' },
+]
+
 const INDEX500_EMPTY_FILTERS = {
-  sector: 'ALL', pattern: 'ALL', minDrop: '', minRsi: '', maxRsi: '', minVolumeRatio: '', sortBy: 'score',
+  sector: 'ALL', pattern: 'ALL', minDrop: '', minRsi: '', maxRsi: '', minVolumeRatio: '',
+  view: 'ALL', sortBy: 'score',
 }
 
 /**
@@ -3485,6 +3533,7 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
       if (filters.minRsi !== '') q.set('minRsi', filters.minRsi)
       if (filters.maxRsi !== '') q.set('maxRsi', filters.maxRsi)
       if (filters.minVolumeRatio !== '') q.set('minVolumeRatio', filters.minVolumeRatio)
+      if (filters.view !== 'ALL') q.set('view', filters.view)
       q.set('sortBy', filters.sortBy)
       setQuerying(true)
       fetch(`${api}/analysis?${q}`)
@@ -3525,7 +3574,17 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {result ? `${result.matched} of ${result.universeSize} ${noun} match` : 'Loading…'}
+          {result ? `${result.viewMatched ?? result.matched} of ${result.universeSize} ${noun} match` : 'Loading…'}
+          {result && filters.view !== 'ALL' && (
+            <>
+              {' · '}
+              <button onClick={() => set({ view: 'ALL' })}
+                className="font-semibold underline underline-offset-2"
+                style={{ color: 'var(--accent)', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>
+                {INDEX500_VIEWS.find((v) => v.key === filters.view)?.label} only — clear
+              </button>
+            </>
+          )}
           {result?.unavailableCount > 0 ? ` · ${result.unavailableCount} without usable data` : ''}
           {generatedAt ? ` · analysed ${new Date(generatedAt).toLocaleString()}` : ''}
           {/* Membership is only ever stale for F&O, and only when NSE could not be reached. Said
@@ -3551,13 +3610,24 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
 
       <SectorHeatmap sectors={sectorSummary} selected={filters.sector} onSelect={(s) => set({ sector: s })} />
 
+      {/* Each tile filters the table to the rows it counted. The counts come from the server and
+          are measured before the view is applied, so the four you have not picked keep showing
+          what picking them would give rather than collapsing to zero. */}
       {result && (
         <div className="mb-5 flex flex-wrap gap-3">
-          <StatTile label="Matching" value={result.matched} />
-          <StatTile label="Down over 6M" value={result.declinerCount} color="var(--status-critical)" />
-          <StatTile label="Showing a pattern" value={result.patternCount} color="var(--accent)" />
-          <StatTile label="Reversals" value={result.reversalCount} color="var(--status-good)" />
-          <StatTile label="Breakouts" value={result.breakoutCount} color="var(--status-good)" />
+          {INDEX500_VIEWS.map(({ key, label, countKey, color, hint }) => (
+            <StatTile
+              key={key}
+              label={label}
+              value={result[countKey] ?? 0}
+              color={color}
+              active={filters.view === key}
+              hint={filters.view === key && key !== 'ALL' ? `Showing only these — click to clear` : hint}
+              // Clicking the tile already in force clears it, so a tile is its own off switch and
+              // the reader is never stuck in a filter they cannot see how to leave.
+              onClick={() => set({ view: filters.view === key ? 'ALL' : key })}
+            />
+          ))}
         </div>
       )}
 
@@ -3725,8 +3795,9 @@ function Index500View({ summary, scanning, progress, scanError, loadError, onSca
               {rows.length === 0 && !querying && (
                 <tr>
                   <td colSpan={INDEX500_COLUMNS.length} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-                    Nothing matches these filters. Try a smaller minimum drop, a wider RSI range, or
-                    clearing the pattern.
+                    {filters.view !== 'ALL'
+                      ? `No ${noun} are both "${INDEX500_VIEWS.find((v) => v.key === filters.view)?.label}" and a match for the filters above.`
+                      : 'Nothing matches these filters. Try a smaller minimum drop, a wider RSI range, or clearing the pattern.'}
                   </td>
                 </tr>
               )}
