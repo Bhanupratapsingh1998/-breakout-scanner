@@ -5,6 +5,7 @@ import com.javawarriors.breakout.candlestick.SupportLevelDetector;
 import com.javawarriors.breakout.index500.pattern.PatternResult;
 import com.javawarriors.breakout.marketdata.BarCache;
 import com.javawarriors.breakout.marketdata.BenchmarkSource;
+import com.javawarriors.breakout.marketdata.FnoUniverseSource;
 import com.javawarriors.breakout.marketdata.NseIndexSource;
 import com.javawarriors.breakout.marketdata.YahooDataSource;
 import com.javawarriors.breakout.wick.DoubleBottomDetector;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -43,6 +45,17 @@ import java.util.function.Consumer;
  * <p>One symbol failing never stops the rest: it is recorded as
  * {@link Index500Analysis#DATA_UNAVAILABLE} with a reason, logged with symbol and timestamp, and
  * the scan continues.
+ *
+ * <h2>One engine, several universes</h2>
+ *
+ * <p>The Nifty 500 and the F&amp;O list are the same analysis over different symbols, so they share
+ * this service rather than each getting their own. Every piece of run state is keyed by
+ * {@link Universe}: the two can be scanned independently, one finishing does not clear the other's
+ * table, and a bug fixed in the scan is fixed for both.
+ *
+ * <p>What they genuinely do share is the {@link BarCache}. Around 190 symbols are in both lists, so
+ * whichever scan runs second reads most of its bars from memory - which is why running both costs
+ * far less than twice running one.
  */
 @Service
 public class Index500AnalysisService {
@@ -66,11 +79,20 @@ public class Index500AnalysisService {
     private final WickReversalConfig wickCfg;
     private final YahooDataSource source = new YahooDataSource();
 
-    private final AtomicBoolean running = new AtomicBoolean(false);
-    private final AtomicReference<String> progress = new AtomicReference<>(null);
-    private final AtomicReference<List<Index500Analysis>> lastRun = new AtomicReference<>(null);
-    private final AtomicReference<Map<String, Object>> lastSummary = new AtomicReference<>(null);
-    private final AtomicReference<String> generatedAt = new AtomicReference<>(null);
+    /** Per-universe run state, created on first use. */
+    private final Map<Universe, Run> runs = new ConcurrentHashMap<>();
+
+    private static final class Run {
+        final AtomicBoolean running = new AtomicBoolean(false);
+        final AtomicReference<String> progress = new AtomicReference<>(null);
+        final AtomicReference<List<Index500Analysis>> lastRun = new AtomicReference<>(null);
+        final AtomicReference<Map<String, Object>> lastSummary = new AtomicReference<>(null);
+        final AtomicReference<String> generatedAt = new AtomicReference<>(null);
+    }
+
+    private Run run(Universe which) {
+        return runs.computeIfAbsent(which, k -> new Run());
+    }
 
     public Index500AnalysisService(Index500Config cfg, SectorService sectors,
                                    PatternAnalysisService patternAnalysis,
@@ -88,59 +110,84 @@ public class Index500AnalysisService {
     }
 
     public boolean triggerScan() {
-        if (!running.compareAndSet(false, true)) return false;
+        return triggerScan(Universe.NIFTY_500);
+    }
+
+    public boolean triggerScan(Universe which) {
+        Run r = run(which);
+        if (!r.running.compareAndSet(false, true)) return false;
         Thread worker = new Thread(() -> {
             try {
-                List<Index500Analysis> rows = runScan(progress::set);
-                lastRun.set(rows);
-                generatedAt.set(Instant.now().toString());
+                List<Index500Analysis> rows = runScan(which, r.progress::set);
+                r.lastRun.set(rows);
+                r.generatedAt.set(Instant.now().toString());
 
                 long analysed = rows.stream().filter(Index500Analysis::analysed).count();
                 Map<String, Object> summary = new LinkedHashMap<>();
                 summary.put("universeSize", rows.size());
                 summary.put("analysed", analysed);
                 summary.put("unavailable", rows.size() - analysed);
-                summary.put("generatedAt", generatedAt.get());
-                lastSummary.set(summary);
+                summary.put("generatedAt", r.generatedAt.get());
+                r.lastSummary.set(summary);
             } catch (Exception e) {
-                log.error("Index 500 analysis failed", e);
-                lastSummary.set(Map.of("error", String.valueOf(e.getMessage())));
+                log.error("{} failed", which.label(), e);
+                r.lastSummary.set(Map.of("error", String.valueOf(e.getMessage())));
             } finally {
-                progress.set(null);
-                running.set(false);
+                r.progress.set(null);
+                r.running.set(false);
             }
-        }, "index500-scan-runner");
+        }, which.slug() + "-scan-runner");
         worker.setDaemon(true);
         worker.start();
         return true;
     }
 
     public Map<String, Object> status() {
+        return status(Universe.NIFTY_500);
+    }
+
+    public Map<String, Object> status(Universe which) {
+        Run r = run(which);
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("running", running.get());
-        body.put("progress", progress.get());
-        body.put("lastResult", lastSummary.get());
+        body.put("running", r.running.get());
+        body.put("progress", r.progress.get());
+        body.put("lastResult", r.lastSummary.get());
         return body;
     }
 
     public List<Index500Analysis> lastRun() {
-        return lastRun.get();
+        return lastRun(Universe.NIFTY_500);
+    }
+
+    public List<Index500Analysis> lastRun(Universe which) {
+        return run(which).lastRun.get();
     }
 
     public String generatedAt() {
-        return generatedAt.get();
+        return generatedAt(Universe.NIFTY_500);
+    }
+
+    public String generatedAt(Universe which) {
+        return run(which).generatedAt.get();
     }
 
     List<Index500Analysis> runScan(Consumer<String> onProgress) {
+        return runScan(Universe.NIFTY_500, onProgress);
+    }
+
+    List<Index500Analysis> runScan(Universe which, Consumer<String> onProgress) {
         try {
+            // Both universes take their sector labels from this CSV, so it is refreshed whichever
+            // one is being scanned.
             NseIndexSource.refreshNifty500();
         } catch (IOException e) {
             log.warn("Nifty 500 list unavailable, using cached membership: {}", e.getMessage());
         }
+        if (which == Universe.FNO) FnoUniverseSource.refresh();
         BenchmarkSource.refreshAll();
         double benchmark6mPct = benchmarkSixMonthReturnPct();
 
-        List<StockMetadata> universe = sectors.universe();
+        List<StockMetadata> universe = sectors.universe(which);
         List<Index500Analysis> out = new ArrayList<>();
 
         for (int i = 0; i < universe.size(); i++) {
@@ -154,7 +201,8 @@ public class Index500AnalysisService {
                 out.add(analyse(meta, bars, benchmark6mPct));
             } catch (Exception e) {
                 // One symbol must never stop the universe. Record it, log it, carry on.
-                log.warn("Index 500: skipping {} at {} - {}", meta.symbol(), Instant.now(), e.toString());
+                log.warn("{}: skipping {} at {} - {}",
+                        which.slug(), meta.symbol(), Instant.now(), e.toString());
                 out.add(Index500Analysis.unavailable(meta,
                         e.getClass().getSimpleName() + ": " + e.getMessage()));
             }
