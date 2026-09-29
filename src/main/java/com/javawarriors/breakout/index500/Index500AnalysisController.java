@@ -132,6 +132,10 @@ public class Index500AnalysisController {
      * <p>{@code minDrop}/{@code maxDrop} are expressed as a <em>fall</em>, so {@code minDrop=15}
      * means "down at least 15%" - which is how the question is asked, rather than making the caller
      * reason about a negative return.
+     *
+     * <p>{@code view} is one of the {@link ResultView} names and is applied last, after every other
+     * filter. That ordering is what lets the tile counts describe the alternatives to the current
+     * selection rather than the selection itself.
      */
     @GetMapping("/analysis")
     public ResponseEntity<?> analysis(
@@ -144,6 +148,7 @@ public class Index500AnalysisController {
             @RequestParam(required = false) Double maxRsi,
             @RequestParam(required = false) Double minVolumeRatio,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String view,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false) String sortDirection,
             @RequestParam(required = false) Integer limit,
@@ -189,11 +194,20 @@ public class Index500AnalysisController {
             filtered.add(r);
         }
 
-        List<Index500Analysis> ordered = ranking.rank(filtered, sortBy, sortDirection);
+        // Counted before the view is applied, so the four tiles a reader has not selected still
+        // show what selecting them would give.
+        Map<String, Object> counts = ResultView.countsFor(filtered);
+
+        ResultView selected = ResultView.ofParam(view);
+        List<Index500Analysis> shown = selected == ResultView.ALL
+                ? filtered
+                : filtered.stream().filter(selected::matches).toList();
+
+        List<Index500Analysis> ordered = ranking.rank(shown, sortBy, sortDirection);
         // The decline rank is always computed on the same filtered set, so "6M Rank" means the same
         // thing whatever the table is currently sorted by.
         Map<String, Integer> declineRanks = PerformanceRankingService.rankMap(
-                ranking.biggestDecliners(filtered));
+                ranking.biggestDecliners(shown));
 
         int cap = limit != null && limit > 0 ? Math.min(limit, cfg.getMaxResults()) : cfg.getMaxResults();
         List<Map<String, Object>> rows = new ArrayList<>();
@@ -212,11 +226,16 @@ public class Index500AnalysisController {
         body.put("universeLabel", u.shortLabel());
         body.put("hasLots", u == Universe.FNO);
         body.put("universeSize", all.size());
+        // "matched" stays what it has always been - the rows the filters left, before the view -
+        // because it is what the Matching tile shows and what deselecting a view returns to.
         body.put("matched", filtered.size());
+        // What is actually in the table, which is what the header line counts.
+        body.put("viewMatched", shown.size());
+        body.put("view", selected.name());
         body.put("returned", rows.size());
-        body.putAll(summaryCounts(filtered));
+        body.putAll(counts);
         body.put("filters", filters(sector, pattern, minDrop, maxDrop, minRsi, maxRsi,
-                minVolumeRatio, status, sortBy, sortDirection));
+                minVolumeRatio, status, view, sortBy, sortDirection));
         body.put("stocks", rows);
         return ResponseEntity.ok(body);
     }
@@ -276,30 +295,10 @@ public class Index500AnalysisController {
         return ResponseEntity.badRequest().body(Map.of("error", String.valueOf(e.getMessage())));
     }
 
-    private static Map<String, Object> summaryCounts(List<Index500Analysis> rows) {
-        long decliners = rows.stream().filter(r -> r.analysed() && r.return6mPct() < 0).count();
-        long reversals = rows.stream().filter(r ->
-                Index500Analysis.STRONG_REVERSAL.equals(r.status())
-                        || Index500Analysis.REVERSAL_WATCH.equals(r.status())).count();
-        long withPattern = rows.stream().filter(r -> r.bestPattern() != null).count();
-        long breakouts = rows.stream().filter(r ->
-                Index500Analysis.BREAKOUT_CONFIRMED.equals(r.status())
-                        || Index500Analysis.BREAKOUT_CANDIDATE.equals(r.status())).count();
-        long unavailable = rows.stream().filter(r -> !r.analysed()).count();
-
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("declinerCount", decliners);
-        out.put("reversalCount", reversals);
-        out.put("patternCount", withPattern);
-        out.put("breakoutCount", breakouts);
-        out.put("unavailableCount", unavailable);
-        return out;
-    }
-
     private static Map<String, Object> filters(String sector, String pattern, Double minDrop,
                                                Double maxDrop, Double minRsi, Double maxRsi,
-                                               Double minVolumeRatio, String status, String sortBy,
-                                               String sortDirection) {
+                                               Double minVolumeRatio, String status, String view,
+                                               String sortBy, String sortDirection) {
         Map<String, Object> f = new LinkedHashMap<>();
         f.put("sector", sector == null || sector.isBlank() ? "ALL" : sector);
         f.put("pattern", pattern == null || pattern.isBlank() ? "ALL" : pattern);
@@ -309,6 +308,7 @@ public class Index500AnalysisController {
         f.put("maxRsi", maxRsi);
         f.put("minVolumeRatio", minVolumeRatio);
         f.put("status", status == null || status.isBlank() ? "ALL" : status);
+        f.put("view", ResultView.ofParam(view).name());
         f.put("sortBy", sortBy == null || sortBy.isBlank() ? "score" : sortBy);
         f.put("sortDirection", sortDirection == null || sortDirection.isBlank() ? "desc" : sortDirection);
         return f;
